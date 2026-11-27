@@ -1,0 +1,279 @@
+:root {
+  color: #17202a;
+  background: #f5f7fb;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP",
+    sans-serif;
+  line-height: 1.6;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+button,
+input {
+  font: inherit;
+}
+
+button {
+  border: 0;
+  border-radius: 0.6rem;
+  background: #2458c5;
+  color: white;
+  cursor: pointer;
+  font-weight: 700;
+  padding: 0.7rem 1rem;
+}
+
+button:hover:not(:disabled) {
+  background: #1b459e;
+}
+
+button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+button.secondary {
+  background: #e8edf7;
+  color: #17202a;
+}
+
+button.secondary:hover:not(:disabled) {
+  background: #d7e0ef;
+}
+
+button.danger {
+  background: #b42318;
+}
+
+button.danger:hover:not(:disabled) {
+  background: #8f1d14;
+}
+
+input {
+  border: 1px solid #8795a7;
+  border-radius: 0.5rem;
+  display: block;
+  margin-top: 0.3rem;
+  max-width: 32rem;
+  padding: 0.65rem;
+  width: 100%;
+}
+
+input:focus-visible,
+button:focus-visible,
+a:focus-visible,
+summary:focus-visible {
+  outline: 3px solid #f6ad2d;
+  outline-offset: 2px;
+}
+
+label {
+  display: block;
+  font-weight: 700;
+  margin-top: 1rem;
+}
+
+a {
+  color: #2458c5;
+}
+
+.page {
+  margin: 0 auto;
+  max-width: 58rem;
+  padding: 2rem 1rem 4rem;
+}
+
+.panel,
+section {
+  margin-top: 1.5rem;
+}
+
+.panel > section,
+.confirmation,
+.reauthentication {
+  border-top: 1px solid #d5dce8;
+  padding-top: 1rem;
+}
+
+.lead {
+  color: #3f4c5f;
+  font-size: 1.1rem;
+}
+
+.error {
+  background: #fff0ed;
+  border-left: 4px solid #b42318;
+  color: #7a1a12;
+  margin: 1rem 0;
+  padding: 0.8rem 1rem;
+}
+
+.status {
+  background: #edf7ed;
+  border-left: 4px solid #287d32;
+  color: #1c5524;
+  margin: 1rem 0;
+  padding: 0.8rem 1rem;
+}
+
+.actions,
+.links {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  margin-top: 1rem;
+}
+
+.links a + a::before {
+  content: "・";
+  margin-right: 0.8rem;
+}
+
+.app-header {
+  align-items: center;
+  background: white;
+  border-bottom: 1px solid #d5dce8;
+  display: flex;
+  gap: 1.5rem;
+  padding: 0.8rem 1rem;
+}
+
+.app-header nav {
+  display: flex;
+  flex: 1;
+  gap: 1rem;
+}
+
+.app-header a {
+  text-decoration: none;
+}
+
+.app-header a[aria-current="page"] {
+  font-weight: 800;
+  text-decoration: underline;
+}
+
+.brand {
+  color: #17202a;
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.card-list {
+  display: grid;
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.card {
+  background: white;
+  border: 1px solid #d5dce8;
+  border-radius: 0.8rem;
+  display: flex;
+  gap: 1rem;
+  padding: 1rem;
+}
+
+.card.highlighted {
+  border-color: #b42318;
+  box-shadow: 0 0 0 3px #fff0ed;
+}
+
+.card-body {
+  flex: 1;
+}
+
+.card h2,
+.card h3 {
+  margin-top: 0;
+}
+
+.card dl {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0;
+}
+
+.card dl div {
+  display: flex;
+  gap: 1rem;
+}
+
+.card dt {
+  color: #566276;
+  min-width: 8rem;
+}
+
+.card dd {
+  margin: 0;
+}
+
+.passkey-icon {
+  align-items: center;
+  background: #e8edf7;
+  border-radius: 50%;
+  color: #2458c5;
+  display: flex;
+  flex: 0 0 3.5rem;
+  height: 3.5rem;
+  justify-content: center;
+  width: 3.5rem;
+}
+
+.passkey-icon img {
+  height: 2rem;
+  width: 2rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color: #e8edf7;
+    background: #10151d;
+  }
+
+  input,
+  .card,
+  .app-header {
+    background: #171e29;
+    color: #e8edf7;
+    border-color: #394556;
+  }
+
+  .lead,
+  .card dt {
+    color: #adb9ca;
+  }
+
+  button.secondary {
+    background: #2b3646;
+    color: #e8edf7;
+  }
+
+  .brand,
+  a {
+    color: #9dbcf8;
+  }
+
+  .error {
+    background: #3b1713;
+    color: #ffd5d0;
+  }
+
+  .status {
+    background: #15351b;
+    color: #bce8c2;
+  }
+
+  .passkey-icon {
+    background: #253046;
+    color: #9dbcf8;
+  }
+}
