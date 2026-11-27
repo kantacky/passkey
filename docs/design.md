@@ -64,7 +64,7 @@ flowchart LR
 
 | ツール | 管理方法 |
 | --- | --- |
-| Bun、Node、その他の CLI | mise。リポジトリ直下の `mise.toml` でバージョンを固定する（`bun`、`node` = 24 系、必要に応じて `gcloud` 等） |
+| Bun、Node、その他の CLI | mise。リポジトリ直下の `mise.toml` でバージョンを固定する（`bun`、`node` = 26 系、必要に応じて `gcloud` 等） |
 | Swift（server） | swiftly（ローカルにインストール済み）。`server/.swift-version` に `6.4.3` を書き、swiftly がディレクトリごとに切り替える。コンテナは同じ版の `swift:6.4.3-noble` |
 | Swift（iOS） | Xcode 同梱のツールチェーン |
 
