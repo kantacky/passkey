@@ -21,8 +21,8 @@ resource "google_cloud_run_v2_service" "server" {
     vpc_access {
       egress = "PRIVATE_RANGES_ONLY"
       network_interfaces {
-        network    = var.vpc_network_name
-        subnetwork = var.vpc_subnet_name
+        network    = data.google_compute_network.main.name
+        subnetwork = data.google_compute_subnetwork.main.name
       }
     }
 
@@ -47,7 +47,6 @@ resource "google_cloud_run_v2_service" "server" {
 
   depends_on = [
     google_project_service.apis["run.googleapis.com"],
-    google_compute_subnetwork.main,
   ]
 }
 
@@ -91,7 +90,6 @@ resource "google_cloud_run_v2_job" "migrate" {
 
   depends_on = [
     google_project_service.apis["run.googleapis.com"],
-    google_compute_subnetwork.main,
   ]
 }
 
@@ -135,7 +133,6 @@ resource "google_cloud_run_v2_job" "cleanup" {
 
   depends_on = [
     google_project_service.apis["run.googleapis.com"],
-    google_compute_subnetwork.main,
   ]
 }
 

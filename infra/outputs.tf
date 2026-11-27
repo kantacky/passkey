@@ -5,7 +5,7 @@ output "cloud_run_service_url" {
 
 output "cloud_sql_connection_name" {
   description = "Cloud SQL connection name."
-  value       = google_sql_database_instance.postgres.connection_name
+  value       = data.google_sql_database_instance.postgres.connection_name
 }
 
 output "server_image_repository" {

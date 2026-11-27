@@ -5,16 +5,12 @@ region              = "asia-northeast1"
 artifact_repository = "passkey"
 image_name          = "server"
 
-vpc_network_name               = "passkey-vpc"
-vpc_subnet_name                = "passkey-subnet"
-vpc_subnet_range               = "10.8.0.0/24"
-private_services_range_name    = "passkey-private-services"
-private_services_address       = "10.64.0.0"
-private_services_prefix_length = 16
+vpc_network_name = "kantacky"
+vpc_subnet_name  = "kantacky"
 
-cloud_sql_instance_name = "passkey-postgres"
-cloud_sql_tier          = "db-f1-micro"
+cloud_sql_instance_name = "kantacky-psql"
 database_name           = "passkey"
+postgres_admin_username = "postgres"
 mailgun_secret_name     = "mailgun-api-key"
 
 cloud_run_service_name = "passkey-server"

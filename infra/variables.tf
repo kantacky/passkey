@@ -28,39 +28,19 @@ variable "vpc_subnet_name" {
   description = "VPC subnetwork name."
 }
 
-variable "vpc_subnet_range" {
-  type        = string
-  description = "VPC subnetwork CIDR range."
-}
-
-variable "private_services_range_name" {
-  type        = string
-  description = "Allocated IP range name for Private Services Access."
-}
-
-variable "private_services_address" {
-  type        = string
-  description = "Starting address of the Private Services Access range."
-}
-
-variable "private_services_prefix_length" {
-  type        = number
-  description = "Prefix length of the Private Services Access range."
-}
-
 variable "cloud_sql_instance_name" {
   type        = string
   description = "Cloud SQL instance name."
 }
 
-variable "cloud_sql_tier" {
-  type        = string
-  description = "Cloud SQL machine tier."
-}
-
 variable "database_name" {
   type        = string
   description = "Application database name."
+}
+
+variable "postgres_admin_username" {
+  type        = string
+  description = "Built-in PostgreSQL user Terraform uses for privilege management. PGPASSWORD supplies its password."
 }
 
 variable "mailgun_secret_name" {
