@@ -61,7 +61,10 @@ actor LiveAPIClient: APIClient {
   private let baseURL: URL
   private let urlSession: URLSession
   private let sessionStore: any SessionStore
+  private let userAgent: String
 
+  // UIDevice は MainActor 分離のため、User-Agent は生成時に MainActor 上で一度だけ組み立てる。
+  @MainActor
   init(
     baseURL: URL? = nil,
     urlSession: URLSession? = nil,
@@ -85,6 +88,9 @@ actor LiveAPIClient: APIClient {
       self.urlSession = URLSession(configuration: configuration)
     }
     self.sessionStore = sessionStore
+    let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
+    let device = UIDevice.current
+    self.userAgent = "Passkey-iOS/\(version) (\(device.model); iOS \(device.systemVersion))"
   }
 
   func startEmailVerification(email: String, purpose: VerificationPurpose) async throws -> EmailVerificationStartResponse {
@@ -235,13 +241,6 @@ actor LiveAPIClient: APIClient {
       return EmptyResponse() as! Response
     }
     return try makeDecoder().decode(Response.self, from: data)
-  }
-
-  private var userAgent: String {
-    let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
-    let model = UIDevice.current.model
-    let systemVersion = UIDevice.current.systemVersion
-    return "Passkey-iOS/\(version) (\(model); iOS \(systemVersion))"
   }
 
   private func apiError(statusCode: Int, data: Data, response: HTTPURLResponse) -> APIError {
