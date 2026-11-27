@@ -181,13 +181,16 @@ extension LivePasskeyService: ASAuthorizationControllerDelegate {
 extension LivePasskeyService: ASAuthorizationControllerPresentationContextProviding {
   nonisolated func presentationAnchor(for controller: ASAuthorizationController) -> ASPresentationAnchor {
     MainActor.assumeIsolated {
-      for scene in UIApplication.shared.connectedScenes {
-        guard let windowScene = scene as? UIWindowScene else { continue }
+      let windowScenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+      for windowScene in windowScenes {
         if let window = windowScene.windows.first(where: \.isKeyWindow) ?? windowScene.windows.first {
           return window
         }
       }
-      return UIWindow(frame: UIScreen.main.bounds)
+      guard let windowScene = windowScenes.first else {
+        preconditionFailure("No UIWindowScene is connected to present the passkey UI.")
+      }
+      return UIWindow(windowScene: windowScene)
     }
   }
 }
