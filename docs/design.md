@@ -64,7 +64,7 @@ flowchart LR
 
 | ツール | 管理方法 |
 | --- | --- |
-| Bun、Node、その他の CLI | mise。リポジトリ直下の `mise.toml` でバージョンを固定する（`bun`、`node` = 26 系、必要に応じて `gcloud` 等） |
+| Bun、Node、Terraform、その他の CLI | mise。リポジトリ直下の `mise.toml` でバージョンを固定する（`bun`、`node` = 26 系、`terraform` = 1.17.2、必要に応じて `gcloud` 等） |
 | Swift（server） | swiftly（ローカルにインストール済み）。`server/.swift-version` に `6.4.3` を書き、swiftly がディレクトリごとに切り替える。コンテナは同じ版の `swift:6.4.3-noble` |
 | Swift（iOS） | Xcode 同梱のツールチェーン |
 
@@ -692,16 +692,20 @@ server/
 
 ### 9.2 Cloud Run / Cloud SQL
 
+GCP インフラは `infra/` の Terraform で管理する。Terraform は 1.17.2、`hashicorp/google` provider は 8.12.0 に固定し、state は GCS backend に置く。state バケットだけは Terraform 管理外とし、バージョニング・uniform bucket-level access・public access prevention を有効にして手動作成する。Cloud Build によるインフラ bootstrap 用の `cloudbuild-infra.yaml` と `passkey-infra` サービスアカウントは使わない。
+
+Terraform が管理する主なリソースは、API 有効化、VPC / Private Services Access、Artifact Registry、Cloud SQL、データベースと IAM DB ユーザー、サービスアカウントと IAM、Secret Manager の `mailgun-api-key` の枠、Cloud Run サービス / Job、Cloud Scheduler である。Cloud Run サービスと Job は Terraform がプレースホルダイメージで作成し、`lifecycle.ignore_changes` で revision template（とサービスの traffic）をアプリデプロイ側に委ねる。実際のイメージ・コンテナ構成は `server/deploy/cloudbuild.yaml` が `server/deploy/cloudrun-*.yaml` から反映する。`passkey-web-proxy` の鍵は Terraform state に秘密を残さないため Terraform では作らず、gcloud で作成する。
+
 - Cloud Run サービスにサービスアカウント `passkey-server@` を割り当て。
 - サイドカー `cloud-sql-proxy --auto-iam-authn --private-ip --health-check <instance>`、アプリは `127.0.0.1:5432` に接続。パスワード不要。
   - コンテナの起動順はアプリが proxy に依存する設定にし、proxy の startup probe が成功してからアプリを起動する。
   - 終了時はアプリが先に終わるまで proxy を維持する。
-- DB ユーザーは IAM サービスアカウントユーザー（`passkey-server@<project>.iam`）。ロール `roles/cloudsql.client`、`roles/cloudsql.instanceUser`。DML のみ許可し、DDL 権限は持たせない。
-- Cloud SQL インスタンスは `cloudsql.iam_authentication=on`、パブリック IP なし。Cloud Run は Direct VPC egress で、Private Services Access 経由で接続する。
+- DB ユーザーは IAM サービスアカウントユーザー（`passkey-server@<project>.iam`）。GCP 側の IAM ロールは `roles/cloudsql.client`、`roles/cloudsql.instanceUser`。PostgreSQL 側のロールは Terraform の `google_sql_user.database_roles` で `pg_read_all_data` と `pg_write_all_data` に固定し、DML のみ許可して DDL 権限は持たせない。
+- Cloud SQL インスタンスは PostgreSQL 18、`cloudsql.iam_authentication=on`、パブリック IP なし。Cloud Run は Direct VPC egress で、Private Services Access 経由で接続する。
 - 接続プールはインスタンスあたり 10。`max-instances` × 10 が Cloud SQL の `max_connections` を超えないようにする。
 - `min-instances` は 1（コールドスタートで Conditional UI が遅れるのを避ける）。
-- Cloud SQL は自動バックアップと PITR を有効にする。HA は使わない（個人プロジェクトとしてのコスト判断）。
-- 機密設定（Mailgun API キー）は Secret Manager から環境変数で注入。
+- Cloud SQL は自動バックアップと PITR、Terraform / GCP 両面の削除保護を有効にする。HA は使わない（個人プロジェクトとしてのコスト判断）。
+- 機密設定（Mailgun API キー）は Secret Manager から環境変数で注入。Terraform は Secret の枠と参照権限だけを作り、鍵の値は state に入れない。
 - Origin・RP ID は環境変数 `RP_ID`, `ORIGIN`（`webauthn-swift` は単一 Origin のみ扱うため 1 つ）。
 - クライアント IP: Worker が付与する `X-Client-IP` のみを信頼する。Cloud Run は IAM 認証で Worker 以外からのリクエストを拒否するため、このヘッダーは偽装できない。`X-Forwarded-For` は使わない。
 - クライアントの国: Worker が付与する `X-Client-Country`（ISO 3166-1 alpha-2）のみを信頼し、§6.4 の通知メールの「おおよその地域（国）」に使う。不明な場合は「不明」と記載する。
@@ -727,7 +731,7 @@ server/
 
 ### 9.4 マイグレーション
 
-- Cloud Run Job `migrate` は、DDL 権限を持つ別の IAM サービスアカウント `passkey-migrator@` で実行する。
+- Cloud Run Job `migrate` は、DDL 権限を持つ別の IAM サービスアカウント `passkey-migrator@` で実行する。PostgreSQL にはグローバルな DDL-only の事前定義ロールがないため、Terraform ではこの専用アカウントにだけ `cloudsqlsuperuser` を付与する。
 - デプロイの順序は「migrate → サービスのデプロイ」（`server/deploy/cloudbuild.yaml` の 1 回のビルドで実行）。変更は後方互換（expand → contract）に限り、旧バージョンのサービスが新スキーマで動くようにする。
 - Job でも proxy サイドカーを使い、アプリ終了後に proxy を終了させる（`--quitquitquit` エンドポイント）。
 
