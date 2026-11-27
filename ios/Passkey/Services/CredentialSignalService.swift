@@ -2,7 +2,6 @@ import AuthenticationServices
 import Foundation
 
 enum CredentialSignalError: Error, Equatable {
-  case unsupportedOS
   case invalidBase64URL
 }
 
@@ -14,9 +13,6 @@ protocol CredentialSignalService: Sendable {
 
 struct LiveCredentialSignalService: CredentialSignalService {
   func reportUnknownCredential(credentialID: Data) async throws {
-    guard #available(iOS 26.2, *) else {
-      throw CredentialSignalError.unsupportedOS
-    }
     try await ASCredentialDataManager().reportUnknownPublicKeyCredential(
       relyingPartyIdentifier: PasskeyConfiguration.rpID,
       credentialID: credentialID
@@ -24,9 +20,6 @@ struct LiveCredentialSignalService: CredentialSignalService {
   }
 
   func reportAllAcceptedCredentials(userHandle: Data, acceptedCredentialIDs: [Data]) async throws {
-    guard #available(iOS 26.2, *) else {
-      throw CredentialSignalError.unsupportedOS
-    }
     try await ASCredentialDataManager().reportAllAcceptedPublicKeyCredentials(
       relyingPartyIdentifier: PasskeyConfiguration.rpID,
       userHandle: userHandle,
@@ -35,9 +28,6 @@ struct LiveCredentialSignalService: CredentialSignalService {
   }
 
   func reportUserDetailsUpdate(userHandle: Data, newName: String) async throws {
-    guard #available(iOS 26.2, *) else {
-      throw CredentialSignalError.unsupportedOS
-    }
     try await ASCredentialDataManager().reportPublicKeyCredentialUpdate(
       relyingPartyIdentifier: PasskeyConfiguration.rpID,
       userHandle: userHandle,

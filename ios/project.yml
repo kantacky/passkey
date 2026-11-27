@@ -2,7 +2,7 @@ name: Passkey
 options:
   bundleIdPrefix: com.kantacky
   deploymentTarget:
-    iOS: "18.0"
+    iOS: "26.2"
   createIntermediateGroups: true
 targets:
   Passkey:
@@ -23,7 +23,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.kantacky.Passkey
         CODE_SIGN_ENTITLEMENTS: Passkey/Passkey.entitlements
         SWIFT_VERSION: "6.0"
-        IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "26.2"
         TARGETED_DEVICE_FAMILY: "1,2"
         SWIFT_STRICT_CONCURRENCY: complete
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
@@ -50,7 +50,7 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: com.kantacky.PasskeyTests
         GENERATE_INFOPLIST_FILE: YES
         SWIFT_VERSION: "6.0"
-        IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "26.2"
         SWIFT_STRICT_CONCURRENCY: complete
         SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
         SWIFT_APPROACHABLE_CONCURRENCY: YES
