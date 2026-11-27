@@ -1,0 +1,57 @@
+apiVersion: run.googleapis.com/v1
+kind: Job
+metadata:
+  name: passkey-cleanup
+  labels:
+    cloud.googleapis.com/location: REGION
+    app: passkey-server
+spec:
+  template:
+    metadata:
+      annotations:
+        run.googleapis.com/network-interfaces: '[{"network":"VPC_NETWORK","subnetwork":"VPC_SUBNET"}]'
+        run.googleapis.com/vpc-access-egress: private-ranges-only
+        run.googleapis.com/container-dependencies: '{"cleanup":["cloud-sql-proxy"]}'
+    spec:
+      template:
+        spec:
+          serviceAccountName: passkey-server@PROJECT_ID.iam.gserviceaccount.com
+          containers:
+            - name: cloud-sql-proxy
+              image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.18.3
+              args:
+                - --auto-iam-authn
+                - --private-ip
+                - --health-check
+                - --structured-logs
+                - --http-port=9090
+                - --admin-port=9091
+                - --quitquitquit
+                - --exit-zero-on-sigterm
+                - PROJECT_ID:REGION:CLOUD_SQL_INSTANCE
+              startupProbe:
+                httpGet:
+                  path: /startup
+                  port: 9090
+                periodSeconds: 1
+                failureThreshold: 30
+            - name: cleanup
+              image: REGION-docker.pkg.dev/PROJECT_ID/passkey/server:IMAGE_TAG
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  /usr/local/bin/passkey-server cleanup
+                  code=$?
+                  curl -fsS -X POST http://127.0.0.1:9091/quitquitquit || true
+                  exit $code
+              env:
+                - name: DATABASE_HOST
+                  value: 127.0.0.1
+                - name: DATABASE_PORT
+                  value: "5432"
+                - name: DATABASE_NAME
+                  value: passkey
+                - name: DATABASE_USER
+                  value: passkey-server@PROJECT_ID.iam
+          timeoutSeconds: 600
+          maxRetries: 1

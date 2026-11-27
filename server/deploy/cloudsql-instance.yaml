@@ -1,0 +1,35 @@
+apiVersion: sqladmin.cnrm.cloud.google.com/v1beta1
+kind: SQLInstance
+metadata:
+  name: CLOUD_SQL_INSTANCE
+spec:
+  databaseVersion: POSTGRES_18
+  region: REGION
+  settings:
+    tier: db-f1-micro
+    availabilityType: ZONAL
+    ipConfiguration:
+      ipv4Enabled: false
+      privateNetwork: projects/PROJECT_ID/global/networks/VPC_NETWORK
+    databaseFlags:
+      - name: cloudsql.iam_authentication
+        value: "on"
+    backupConfiguration:
+      enabled: true
+      pointInTimeRecoveryEnabled: true
+      startTime: "03:00"
+    insightsConfig:
+      queryInsightsEnabled: true
+---
+apiVersion: sqladmin.cnrm.cloud.google.com/v1beta1
+kind: SQLDatabase
+metadata:
+  name: passkey
+spec:
+  instanceRef:
+    name: CLOUD_SQL_INSTANCE
+---
+# Grant these IAM roles outside the application workload manifests:
+# passkey-server@PROJECT_ID.iam.gserviceaccount.com: roles/cloudsql.client, roles/cloudsql.instanceUser
+# passkey-migrator@PROJECT_ID.iam.gserviceaccount.com: roles/cloudsql.client, roles/cloudsql.instanceUser
+# passkey-scheduler@PROJECT_ID.iam.gserviceaccount.com: roles/run.developer or a custom role limited to run.jobs.run

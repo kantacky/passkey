@@ -1,0 +1,19 @@
+# Config Connector resource. Apply in the cluster that manages PROJECT_ID.
+apiVersion: cloudscheduler.cnrm.cloud.google.com/v1beta1
+kind: CloudSchedulerJob
+metadata:
+  name: passkey-cleanup-hourly
+  annotations:
+    cnrm.cloud.google.com/project-id: PROJECT_ID
+spec:
+  location: REGION
+  schedule: "0 * * * *"
+  timeZone: Etc/UTC
+  description: Delete expired passkey server records through the Cloud Run cleanup job.
+  httpTarget:
+    uri: https://REGION-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/PROJECT_ID/jobs/passkey-cleanup:run
+    httpMethod: POST
+    oauthToken:
+      scope: https://www.googleapis.com/auth/cloud-platform
+      serviceAccountRef:
+        external: passkey-scheduler@PROJECT_ID.iam.gserviceaccount.com
