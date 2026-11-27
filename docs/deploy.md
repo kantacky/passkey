@@ -4,7 +4,7 @@
 
 ## 1. 前提ツール
 
-- mise: Bun 1.3.4 と Node 24.11.1 を `mise.toml` から入れる。
+- mise: Bun 1.4.5 と Node 26.13.1 を `mise.toml` から入れる。
 - Bun / Node: `mise install` で入れる。`cf` は npm 依存 (`web/package.json` の `cf` 1.0.0-rc.6) を `bunx cf` 経由で使う。
 - Google Cloud CLI (`gcloud`): 認証済みであること。PostgreSQL 18 と `gcloud sql users assign-roles` を使うため最新版に近いものを使う。mise で管理している場合はそのインストールを使う。
 - swiftly: server をローカルでビルド・テストするときに使う。Cloud Build でのデプロイそのものには不要。
