@@ -1,16 +1,18 @@
 # デプロイ手順
 
-このリポジトリは CI/CD を使わず、ローカルの `gcloud` CLI と Cloudflare `cf` CLI から手動デプロイする。対象環境は本番のみで、構成は設計書 `docs/design.md` の §1、§9、§10 に従う。
+このリポジトリは CI/CD を使わず、ローカルの Terraform・Google Cloud CLI・Cloudflare `cf` CLI から手動デプロイする。対象環境は本番のみで、構成は設計書 `docs/design.md` の §1、§9、§10 に従う。
+
+GCP インフラの正本は `infra/` の Terraform、通常のサーバーデプロイは `server/deploy/cloudbuild.yaml`、Cloud Run の実行時テンプレートは `server/deploy/cloudrun-*.yaml` である。以前の `server/deploy/cloudbuild-infra.yaml` と bootstrap 用 `passkey-infra` サービスアカウントは廃止した。
 
 ## 1. 前提ツール
 
-- mise: Bun 1.4.5 と Node 26.13.1 を `mise.toml` から入れる。
+- mise: Bun 1.4.5、Node 26.13.1、Terraform 1.17.2 を `mise.toml` から入れる。
 - Bun / Node: `mise install` で入れる。`cf` は npm 依存 (`web/package.json` の `cf` 1.0.0-rc.6) を `bunx cf` 経由で使う。
-- Google Cloud CLI (`gcloud`): 認証済みであること。PostgreSQL 18 と `gcloud sql users assign-roles` を使うため最新版に近いものを使う。mise で管理している場合はそのインストールを使う。
+- Google Cloud CLI (`gcloud`): 認証済みであること。PostgreSQL 18 と Cloud Run の複数コンテナを扱うため最新版に近いものを使う。mise で管理している場合はそのインストールを使う。
 - swiftly: server をローカルでビルド・テストするときに使う。Cloud Build でのデプロイそのものには不要。
 - Xcode: iOS の Team ID と Associated Domains を設定するときに使う。
 - Cloudflare アカウント: `kantacky.com` ゾーンが Cloudflare で有効化済みであること。
-- GCP プロジェクト: デプロイ先として作成済みで、課金が有効であること。未作成なら Google Cloud コンソールで作成して課金を有効化する。
+- GCP プロジェクト: デプロイ先として作成済みで、課金が有効であること。未作成なら Google Cloud コンソールで作成して課金を有効化する。Terraform を実行するアカウントには、プロジェクトオーナー相当の広い権限が必要である。
 
 初回だけ、次を実行する。
 
@@ -18,17 +20,22 @@
 mise install
 cd web && bun install && cd ..
 gcloud auth login
+gcloud auth application-default login
 gcloud config set project <GCP_PROJECT_ID>
 ```
 
+Terraform の Google provider は Application Default Credentials (ADC) を使う。`gcloud auth login` だけでは不足する環境があるため、`gcloud auth application-default login` も行う。
+
 ## 2. 設定値の場所
 
-デプロイ固有の値は、次の YAML 先頭にある `substitutions` に集約する。
+デプロイ固有の値は `infra/terraform.tfvars` に集約する。このファイルはコミットするが、秘密値は入れない。最初に `project_id = "__GCP_PROJECT_ID__"` を実際のプロジェクト ID に書き換える。リージョン、VPC、Cloud SQL、Cloud Run、サービスアカウント、RP ID、Mailgun ドメインなどもここで変更する。
 
-- `server/deploy/cloudbuild-infra.yaml`: 初回インフラ構成
-- `server/deploy/cloudbuild.yaml`: 通常のサーバーデプロイ
+例外が 2 つある。
 
-Cloud Build には設定ファイルをインクルードする仕組みがないため、両方に出る `_GCP_PROJECT_ID`、`_REGION`、`_VPC_NETWORK`、`_VPC_SUBNET`、`_CLOUD_SQL_INSTANCE`、`_DATABASE_NAME`、各サービスアカウント名は同じ値に揃える。`__GCP_PROJECT_ID__` だけは必ず実際のプロジェクト ID に置き換える。Cloud Run 用 YAML (`cloudrun-*.yaml`) はテンプレートで、`__REGION__` などのプレースホルダは手で編集せず、`cloudbuild.yaml` が各デプロイの値とイメージタグで置換する。
+1. Terraform state のバケット名: GCS backend は変数を参照できないため、`infra/backend.tf` の `bucket` を直接編集する。`terraform init -backend-config` などの CLI 引数は使わない。
+2. Cloud Build 実行サービスアカウント名: Cloud Build は step 実行前に `serviceAccount` の identity を決めるため、このフィールドは `infra/terraform.tfvars` を読めない。既定の `passkey-cloudbuild` を変える場合だけ、`server/deploy/cloudbuild.yaml` の `serviceAccount` も同じ名前に編集する。ビルド開始時に tfvars との一致を検査する。
+
+`server/deploy/cloudrun-*.yaml` はテンプレートである。`__REGION__` などのプレースホルダは手で編集せず、`cloudbuild.yaml` が `infra/terraform.tfvars` の値とイメージタグで置換する。
 
 主な既定値:
 
@@ -40,88 +47,82 @@ Cloud Build には設定ファイルをインクルードする仕組みがな�
 | Cloud SQL インスタンス / DB | `passkey-postgres` / `passkey` |
 | Cloud Run サービス | `passkey-server` |
 | Cloud Run Job | `passkey-migrate`, `passkey-cleanup` |
-| サービスアカウント | `passkey-infra`, `passkey-cloudbuild`, `passkey-server`, `passkey-migrator`, `passkey-scheduler`, `passkey-web-proxy` |
+| サービスアカウント | `passkey-cloudbuild`, `passkey-server`, `passkey-migrator`, `passkey-scheduler`, `passkey-web-proxy` |
 | RP ID / Mailgun ドメイン | `passkey.kantacky.com` / `mail.passkey.kantacky.com` |
 
 Web 側の値は `web/cloudflare.config.ts` にある。`CLOUD_RUN_URL` と `APPLE_TEAM_ID` は後述の初回セットアップで実値に置き換える。
 
 ## 3. 初回セットアップ
 
-### 3.1 インフラ実行用サービスアカウントのブートストラップ
+### 3.1 Terraform state バケットの作成
 
-`cloudbuild-infra.yaml` は専用サービスアカウント `passkey-infra` で実行される。このアカウントは `passkey-cloudbuild` を含むサービスアカウントを作る側なので、例外的に最初だけ手動で作る。`_INFRA_SA_NAME` を変える場合は、この節の `passkey-infra` も同じ名前に読み替える。`passkey-cloudbuild` は infra build が作成し、以後の通常デプロイ専用の権限だけを持つ。プロジェクトオーナー以外が実行する場合は、ビルドを submit するユーザーに Cloud Build Editor (`roles/cloudbuild.builds.editor`) と Service Usage Consumer (`roles/serviceusage.serviceUsageConsumer`) も必要である。
+state バケットは Terraform 管理外なので、Terraform を使う前に 1 回だけ `gcloud` で作る。バケット名はグローバルで一意である必要がある。以下は `<GCP_PROJECT_ID>-passkey-terraform-state` を使う例だが、既に取られている場合は別名にする。
 
 ```sh
 PROJECT_ID=<GCP_PROJECT_ID>
-INFRA_SA="passkey-infra@${PROJECT_ID}.iam.gserviceaccount.com"
+STATE_BUCKET="${PROJECT_ID}-passkey-terraform-state"
 
-gcloud services enable cloudbuild.googleapis.com iam.googleapis.com cloudresourcemanager.googleapis.com \
-  --project "$PROJECT_ID"
+gcloud storage buckets create "gs://${STATE_BUCKET}" \
+  --project "$PROJECT_ID" \
+  --location=asia-northeast1 \
+  --uniform-bucket-level-access \
+  --public-access-prevention
 
-gcloud iam service-accounts create passkey-infra \
-  --display-name "passkey: infrastructure bootstrap" \
-  --project "$PROJECT_ID" 2>/dev/null || true
-
-for role in \
-  roles/logging.logWriter \
-  roles/storage.objectViewer \
-  roles/serviceusage.serviceUsageAdmin \
-  roles/compute.networkAdmin \
-  roles/artifactregistry.admin \
-  roles/cloudsql.admin \
-  roles/iam.serviceAccountAdmin \
-  roles/iam.serviceAccountUser \
-  roles/resourcemanager.projectIamAdmin \
-  roles/secretmanager.admin \
-  roles/run.admin \
-  roles/cloudscheduler.admin
-do
-  gcloud projects add-iam-policy-binding "$PROJECT_ID" \
-    --member "serviceAccount:$INFRA_SA" \
-    --role "$role"
-done
-
-# 実行者がこのサービスアカウントをビルド実行 identity として使えるようにする。
-gcloud iam service-accounts add-iam-policy-binding "$INFRA_SA" \
-  --member "user:$(gcloud config get-value account)" \
-  --role roles/iam.serviceAccountUser
+gcloud storage buckets update "gs://${STATE_BUCKET}" --versioning
 ```
 
-`passkey-infra` は広い権限を持つので鍵は作らず、インフラの初期化・変更時だけ使う。通常デプロイには使わない。
+次に `infra/backend.tf` を開き、`bucket = "__GCP_PROJECT_ID__-passkey-terraform-state"` を作成したバケット名に書き換える。例:
 
-### 3.2 インフラ構成の実行
+```hcl
+terraform {
+  backend "gcs" {
+    bucket = "my-project-passkey-terraform-state"
+    prefix = "passkey"
+  }
+}
+```
 
-2 つの `cloudbuild-*.yaml` の `_GCP_PROJECT_ID` を実際のプロジェクト ID に置き換え、必要ならリージョンや CIDR も調整したうえで、リポジトリ直下から実行する。
+既存バケットを使う場合は、自分のプロジェクトのバケットであること、バージョニング・uniform bucket-level access・public access prevention が有効であることを確認する。
+
+### 3.2 Terraform でインフラを作成
+
+`infra/terraform.tfvars` の `project_id` を実際のプロジェクト IDに書き換えたことを確認し、次を実行する。backend や変数を CLI 引数で渡す必要はない。
 
 ```sh
-gcloud builds submit --config server/deploy/cloudbuild-infra.yaml .
+cd infra
+terraform init
+terraform plan
+terraform apply
+cd ..
 ```
 
-このビルドは冪等で、不足しているものだけを作る。内容は次のとおり。
+Terraform は次を作成する。
 
-- API の有効化
+- 必要な Google Cloud API の有効化
 - VPC、サブネット、Private Services Access 用 IP 範囲と peering
 - Artifact Registry リポジトリ
-- `passkey-cloudbuild`、`passkey-server`、`passkey-migrator`、`passkey-scheduler`、`passkey-web-proxy` のサービスアカウント
+- `passkey-cloudbuild`、`passkey-server`、`passkey-migrator`、`passkey-scheduler`、`passkey-web-proxy` のサービスアカウントと IAM
 - Cloud SQL for PostgreSQL 18（private IP のみ、IAM DB 認証、自動バックアップ、PITR、削除保護）
 - `passkey` データベースと IAM DB ユーザー
+- DB ロール（`passkey-server@<project>.iam` に `pg_read_all_data` / `pg_write_all_data`、`passkey-migrator@<project>.iam` に `cloudsqlsuperuser`）
 - Secret Manager の `mailgun-api-key` の枠（値は入っていない）
+- Cloud Run サービスと migrate / cleanup Job（プレースホルダイメージ）
+- `passkey-web-proxy` と `passkey-scheduler` に対する resource 単位の `roles/run.invoker`
 - 1 時間ごとの Cloud Scheduler `passkey-cleanup-hourly`
 
-DB 権限はこのビルドで次のように付与する。
+DB ロールも Terraform の `google_sql_user.database_roles` で付与するため、初回の手動 SQL / `gcloud sql users assign-roles` は不要である。
 
-- `passkey-migrator@<project>.iam`: `cloudsqlsuperuser`（マイグレーション用の DDL。PostgreSQL にはグローバルな DDL-only の事前定義ロールがないため、専用のマイグレーションアカウントに限定して使う）
-- `passkey-server@<project>.iam`: `pg_read_all_data` と `pg_write_all_data`（SELECT / INSERT / UPDATE / DELETE の DML。DDL は持たない）。これらは PostgreSQL 既定ロールなのでインスタンス内の全データベースに効く。Cloud SQL インスタンスを他アプリと共有する場合は、Data API で専用ロールを作る構成に置き換える。
+Cloud Run サービスと Job は、まだアプリイメージが存在しないためプレースホルダイメージで作られる。Terraform は `lifecycle.ignore_changes` で revision template（サービスは traffic も）を無視し、以後のイメージ・コンテナ構成は通常デプロイ側が所有する。初回の Terraform 作成時点では Secret の値がなくてもよいように、プレースホルダ側は `MAILGUN_API_KEY` を参照しない。Secret 参照は通常デプロイの Cloud Run テンプレートで追加される。
 
-Cloud Run サービスと Job はまだ存在しないので、`passkey-web-proxy` と `passkey-scheduler` への resource 単位の `roles/run.invoker` は、最初の通常デプロイで付与される。
+`passkey-web-proxy` のサービスアカウント鍵は Terraform では作らない。鍵の内容が Terraform state に残るのを避けるため、後述の Worker 設定で `gcloud` から作成する。
 
 ### 3.3 Mailgun
 
 1. Mailgun で送信ドメイン `mail.passkey.kantacky.com` を作成し、US / EU のリージョンを選ぶ。
-2. 表示された SPF、DKIM、MX、DMARC 用レコードを Cloudflare DNS に登録する。DMARC は設計どおり最初は `p=none` にする。
+2. 表示された SPF、DKIM、MX、DMARC 用レコードを Cloudflare DNSに登録する。DMARC は設計どおり最初は `p=none` にする。
 3. Mailgun 側でドメイン検証が済んだら、開封・クリックトラッキングを無効化する。
-4. EU リージョンを選んだ場合は、`server/deploy/cloudbuild.yaml` の `_MAILGUN_API_BASE_URL` を `https://api.eu.mailgun.net` に変える。
-5. Sending API key を Secret Manager に登録する。
+4. EU リージョンを選んだ場合は、`infra/terraform.tfvars` の `mailgun_api_base_url` を `https://api.eu.mailgun.net` に変える。この値は次回の通常デプロイ時に Cloud Run テンプレートへ反映される。
+5. Sending API key を Secret Manager に登録する。Secret の値は Terraform に入れない。
 
 ```sh
 read -rs MAILGUN_API_KEY
@@ -139,7 +140,9 @@ Secret に少なくとも 1 つのバージョンが入った状態で、リポ�
 gcloud builds submit --config server/deploy/cloudbuild.yaml .
 ```
 
-この 1 コマンドで、linux/amd64 イメージのビルドと push、`passkey-migrate` の適用と実行、`passkey-server` の適用、`passkey-cleanup` の適用、Worker / Scheduler 用 SA への `roles/run.invoker` 付与まで行う。イメージタグは手動 submit でも必ず存在する Cloud Build の `$BUILD_ID` なので、空の `$COMMIT_SHA` 問題はない。
+このビルドは `infra/terraform.tfvars` を読み、linux/amd64 イメージのビルドと push、`passkey-migrate` へのテンプレート適用と実行、`passkey-server` の適用、`passkey-cleanup` の適用を行う。IAM 付与やインフラ作成は行わない。イメージタグは手動 submit でも必ず存在する Cloud Build の `$BUILD_ID` なので、空の `$COMMIT_SHA` 問題はない。
+
+ビルドは `passkey-cloudbuild` サービスアカウントとして実行される。プロジェクトオーナー以外が submit する場合は、そのユーザーに Cloud Build Editor (`roles/cloudbuild.builds.editor`)、Service Usage Consumer (`roles/serviceusage.serviceUsageConsumer`)、および `passkey-cloudbuild` 上の Service Account User (`roles/iam.serviceAccountUser`) が必要である。
 
 デプロイ後、Cloud Run URL を取得する。
 
@@ -216,6 +219,8 @@ gcloud builds submit --config server/deploy/cloudbuild.yaml .
 ```
 
 このビルド内で `passkey-migrate` が先に実行され、成功した場合だけ `passkey-server` が更新される。`passkey-cleanup` も同じイメージに更新される。マイグレーションが失敗した場合はビルドが止まり、サービスは更新されない。
+
+Cloud Run の実行時テンプレートに影響する値（例: `origin`、`mailgun_api_base_url`）を `infra/terraform.tfvars` で変えた場合も、このコマンドで反映される。リソース名・VPC・サービスアカウント等のインフラ値を変えた場合は、先に `cd infra && terraform plan && terraform apply` を実行する。
 
 ### 4.2 Worker
 
@@ -358,9 +363,9 @@ gcloud iam service-accounts keys list \
 
 ## 8. 運用メモ
 
-- `server/deploy/cloudbuild.yaml` の substitutions を変えた場合は、次回の通常デプロイに反映される。
+- インフラ変更は `infra/terraform.tfvars` または `infra/*.tf` を編集し、`cd infra && terraform plan && terraform apply` で行う。`terraform apply` だけでは Cloud Run のアプリイメージは更新されない。アプリ変更は通常デプロイを使う。
+- Terraform state には Mailgun API キーと `passkey-web-proxy` 鍵を入れない。Secret Manager の値登録とサービスアカウント鍵作成は、この文档の `gcloud` / Cloudflare 手順で行う。
 - `db-f1-micro` の PostgreSQL は既定で `max_connections` が 25 程度なので、サーバー側プール 10 に対して Cloud Run `maxScale` は 2 にしてある。スケールアウトが必要なら、先に Cloud SQL の tier / `max_connections` と接続予算を見直す。
-- `server/deploy/cloudbuild-infra.yaml` は冪等だが、Cloud SQL や VPC の既存設定をすべて強制的に追従させるものではない。インフラ値を変えるときは変更内容を確認してから再実行する。
-- `passkey-cloudbuild` は通常デプロイに必要な `roles/logging.logWriter`、`roles/storage.objectViewer`、`roles/artifactregistry.writer`、`roles/run.admin` と、server / migrator 両サービスアカウント上の `roles/iam.serviceAccountUser` だけを持つ。広いインフラ権限は分離された `passkey-infra` に残るため、infra 再実行時にも権限を付け直す必要はない。
-- Cloud SQL を削除するには、まず削除保護を解除する必要がある。削除するとバックアップ運用に影響するため、本番では原則行わない。
+- `passkey-cloudbuild` は通常デプロイに必要な `roles/logging.logWriter`、`roles/storage.objectViewer`、`roles/run.admin`、Artifact Registry の `roles/artifactregistry.writer`、server / migrator 両サービスアカウント上の `roles/iam.serviceAccountUser` を持つ。広いインフラ権限は持たせない。
+- Cloud SQL は Terraform 側と GCP 側の両方で削除保護が有効である。削除するには両方を解除する必要があるが、本番では原則行わない。
 - Secret Manager の `mailgun-api-key` を更新した場合、Cloud Run サービスは次のリビジョン作成時に新しい値を読む。通常デプロイを行うか、サービスを更新して再起動する。
