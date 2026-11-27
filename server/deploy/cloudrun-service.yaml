@@ -1,9 +1,9 @@
 apiVersion: serving.knative.dev/v1
 kind: Service
 metadata:
-  name: passkey-server
+  name: __CLOUD_RUN_SERVICE_NAME__
   labels:
-    cloud.googleapis.com/location: REGION
+    cloud.googleapis.com/location: __REGION__
     app: passkey-server
   annotations:
     # Cloud Run IAM authentication is required. Do not grant allUsers run.invoker.
@@ -13,14 +13,14 @@ spec:
     metadata:
       annotations:
         autoscaling.knative.dev/minScale: "1"
-        autoscaling.knative.dev/maxScale: "10"
+        autoscaling.knative.dev/maxScale: "2"
         run.googleapis.com/execution-environment: gen2
-        run.googleapis.com/network-interfaces: '[{"network":"VPC_NETWORK","subnetwork":"VPC_SUBNET"}]'
+        run.googleapis.com/network-interfaces: '[{"network":"__VPC_NETWORK__","subnetwork":"__VPC_SUBNET__"}]'
         run.googleapis.com/vpc-access-egress: private-ranges-only
         # cloud-sql-proxy becomes healthy first; app starts afterward. Shutdown is the reverse order.
         run.googleapis.com/container-dependencies: '{"app":["cloud-sql-proxy"]}'
     spec:
-      serviceAccountName: passkey-server@PROJECT_ID.iam.gserviceaccount.com
+      serviceAccountName: __SERVER_SA_NAME__@__GCP_PROJECT_ID__.iam.gserviceaccount.com
       containerConcurrency: 80
       timeoutSeconds: 300
       containers:
@@ -30,9 +30,10 @@ spec:
             - --auto-iam-authn
             - --private-ip
             - --health-check
-            - --structured-logs
+            - --http-address=0.0.0.0
             - --http-port=9090
-            - PROJECT_ID:REGION:CLOUD_SQL_INSTANCE
+            - --structured-logs
+            - __GCP_PROJECT_ID__:__REGION__:__CLOUD_SQL_INSTANCE__
           startupProbe:
             httpGet:
               path: /startup
@@ -45,7 +46,7 @@ spec:
               cpu: "0.25"
               memory: 128Mi
         - name: app
-          image: REGION-docker.pkg.dev/PROJECT_ID/passkey/server:IMAGE_TAG
+          image: __REGION__-docker.pkg.dev/__GCP_PROJECT_ID__/__ARTIFACT_REPOSITORY__/__IMAGE_NAME__:__IMAGE_TAG__
           command: ["/usr/local/bin/passkey-server"]
           args: ["serve"]
           ports:
@@ -53,9 +54,9 @@ spec:
               containerPort: 8080
           env:
             - name: RP_ID
-              value: passkey.kantacky.com
+              value: __RP_ID__
             - name: ORIGIN
-              value: https://passkey.kantacky.com
+              value: __ORIGIN__
             - name: HOST
               value: 0.0.0.0
             - name: PORT
@@ -65,20 +66,20 @@ spec:
             - name: DATABASE_PORT
               value: "5432"
             - name: DATABASE_NAME
-              value: passkey
+              value: __DATABASE_NAME__
             # IAM database user for the Cloud Run service account. Cloud SQL Proxy performs IAM authn.
             - name: DATABASE_USER
-              value: passkey-server@PROJECT_ID.iam
+              value: __SERVER_SA_NAME__@__GCP_PROJECT_ID__.iam
             - name: MAILGUN_DOMAIN
-              value: MAILGUN_DOMAIN
+              value: __MAILGUN_DOMAIN__
             - name: MAILGUN_API_BASE_URL
-              value: https://api.mailgun.net
+              value: __MAILGUN_API_BASE_URL__
             - name: MAIL_FROM
-              value: no-reply@MAILGUN_DOMAIN
+              value: __MAIL_FROM__
             - name: MAILGUN_API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: projects/PROJECT_ID/secrets/mailgun-api-key
+                  name: __MAILGUN_SECRET_NAME__
                   key: latest
           resources:
             limits:
@@ -90,3 +91,6 @@ spec:
             periodSeconds: 1
             timeoutSeconds: 1
             failureThreshold: 30
+  traffic:
+    - percent: 100
+      latestRevision: true

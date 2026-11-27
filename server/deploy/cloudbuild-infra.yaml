@@ -1,0 +1,327 @@
+# First-time infrastructure bootstrap. Edit the substitution values below before use.
+# The build is idempotent: existing resources are kept and missing resources are created.
+substitutions:
+  _GCP_PROJECT_ID: __GCP_PROJECT_ID__
+  _REGION: asia-northeast1
+  _ARTIFACT_REPOSITORY: passkey
+  _VPC_NETWORK: passkey-vpc
+  _VPC_SUBNET: passkey-subnet
+  _VPC_SUBNET_RANGE: 10.8.0.0/24
+  _PRIVATE_SERVICES_RANGE_NAME: passkey-private-services
+  _PRIVATE_SERVICES_ADDRESS: 10.64.0.0
+  _PRIVATE_SERVICES_PREFIX_LENGTH: "16"
+  _CLOUD_SQL_INSTANCE: passkey-postgres
+  _CLOUD_SQL_TIER: db-f1-micro
+  _DATABASE_NAME: passkey
+  _MAILGUN_SECRET_NAME: mailgun-api-key
+  _CLOUD_RUN_SERVICE_NAME: passkey-server
+  _MIGRATE_JOB_NAME: passkey-migrate
+  _CLEANUP_JOB_NAME: passkey-cleanup
+  _SCHEDULER_JOB_NAME: passkey-cleanup-hourly
+  _SERVER_SA_NAME: passkey-server
+  _MIGRATOR_SA_NAME: passkey-migrator
+  _SCHEDULER_SA_NAME: passkey-scheduler
+  _WEB_PROXY_SA_NAME: passkey-web-proxy
+  _CLOUD_BUILD_SA_NAME: passkey-cloudbuild
+  # This bootstrap account must be created manually before the first infrastructure build.
+  _INFRA_SA_NAME: passkey-infra
+serviceAccount: projects/${PROJECT_ID}/serviceAccounts/${_INFRA_SA_NAME}@${PROJECT_ID}.iam.gserviceaccount.com
+timeout: 3600s
+options:
+  logging: CLOUD_LOGGING_ONLY
+steps:
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: validate-config
+    entrypoint: bash
+    args:
+      - -euo
+      - pipefail
+      - -c
+      - |
+        if [[ "${_GCP_PROJECT_ID}" == "__GCP_PROJECT_ID__" ]]; then
+          echo "Edit server/deploy/cloudbuild-infra.yaml and replace __GCP_PROJECT_ID__." >&2
+          exit 1
+        fi
+        if [[ "${PROJECT_ID}" != "${_GCP_PROJECT_ID}" ]]; then
+          echo "gcloud target project '${PROJECT_ID}' does not match _GCP_PROJECT_ID '${_GCP_PROJECT_ID}'." >&2
+          echo "Run: gcloud config set project ${_GCP_PROJECT_ID}" >&2
+          exit 1
+        fi
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: enable-apis
+    script: |
+      gcloud services enable \
+        artifactregistry.googleapis.com \
+        cloudbuild.googleapis.com \
+        cloudresourcemanager.googleapis.com \
+        cloudscheduler.googleapis.com \
+        compute.googleapis.com \
+        iam.googleapis.com \
+        iamcredentials.googleapis.com \
+        logging.googleapis.com \
+        run.googleapis.com \
+        secretmanager.googleapis.com \
+        servicenetworking.googleapis.com \
+        sqladmin.googleapis.com \
+        --project "${_GCP_PROJECT_ID}"
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: create-vpc-and-private-services-access
+    entrypoint: bash
+    args:
+      - -euo
+      - pipefail
+      - -c
+      - |
+        if ! gcloud compute networks describe "${_VPC_NETWORK}" --project "${_GCP_PROJECT_ID}" >/dev/null 2>&1; then
+          gcloud compute networks create "${_VPC_NETWORK}" \
+            --subnet-mode=custom \
+            --bgp-routing-mode=regional \
+            --project "${_GCP_PROJECT_ID}"
+        fi
+
+        if ! gcloud compute networks subnets describe "${_VPC_SUBNET}" --region "${_REGION}" --project "${_GCP_PROJECT_ID}" >/dev/null 2>&1; then
+          gcloud compute networks subnets create "${_VPC_SUBNET}" \
+            --network "${_VPC_NETWORK}" \
+            --region "${_REGION}" \
+            --range "${_VPC_SUBNET_RANGE}" \
+            --project "${_GCP_PROJECT_ID}"
+        fi
+
+        if ! gcloud compute addresses describe "${_PRIVATE_SERVICES_RANGE_NAME}" --global --project "${_GCP_PROJECT_ID}" >/dev/null 2>&1; then
+          gcloud compute addresses create "${_PRIVATE_SERVICES_RANGE_NAME}" \
+            --global \
+            --purpose=VPC_PEERING \
+            --addresses "${_PRIVATE_SERVICES_ADDRESS}" \
+            --prefix-length "${_PRIVATE_SERVICES_PREFIX_LENGTH}" \
+            --network "${_VPC_NETWORK}" \
+            --project "${_GCP_PROJECT_ID}"
+        fi
+
+        if ! gcloud services vpc-peerings list \
+            --network "${_VPC_NETWORK}" \
+            --service servicenetworking.googleapis.com \
+            --project "${_GCP_PROJECT_ID}" \
+            --format=json | grep -q servicenetworking.googleapis.com; then
+          gcloud services vpc-peerings connect \
+            --service servicenetworking.googleapis.com \
+            --ranges "${_PRIVATE_SERVICES_RANGE_NAME}" \
+            --network "${_VPC_NETWORK}" \
+            --project "${_GCP_PROJECT_ID}"
+        fi
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: create-artifact-registry
+    script: |
+      if ! gcloud artifacts repositories describe "${_ARTIFACT_REPOSITORY}" --location "${_REGION}" --project "${_GCP_PROJECT_ID}" >/dev/null 2>&1; then
+        gcloud artifacts repositories create "${_ARTIFACT_REPOSITORY}" \
+          --repository-format=docker \
+          --location "${_REGION}" \
+          --description "Passkey server container images" \
+          --project "${_GCP_PROJECT_ID}"
+      fi
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: create-service-accounts
+    entrypoint: bash
+    args:
+      - -euo
+      - pipefail
+      - -c
+      - |
+        for account in "${_SERVER_SA_NAME}" "${_MIGRATOR_SA_NAME}" "${_SCHEDULER_SA_NAME}" "${_WEB_PROXY_SA_NAME}" "${_CLOUD_BUILD_SA_NAME}"; do
+          email="$${account}@${_GCP_PROJECT_ID}.iam.gserviceaccount.com"
+          if ! gcloud iam service-accounts describe "$$email" --project "${_GCP_PROJECT_ID}" >/dev/null 2>&1; then
+            gcloud iam service-accounts create "$${account}" \
+              --display-name "passkey: $${account}" \
+              --project "${_GCP_PROJECT_ID}"
+          fi
+        done
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: grant-iam-roles
+    entrypoint: bash
+    args:
+      - -euo
+      - pipefail
+      - -c
+      - |
+        for account in "${_SERVER_SA_NAME}" "${_MIGRATOR_SA_NAME}"; do
+          email="$${account}@${_GCP_PROJECT_ID}.iam.gserviceaccount.com"
+          for role in roles/cloudsql.client roles/cloudsql.instanceUser; do
+            gcloud projects add-iam-policy-binding "${_GCP_PROJECT_ID}" \
+              --member "serviceAccount:$$email" \
+              --role "$$role"
+          done
+          gcloud artifacts repositories add-iam-policy-binding "${_ARTIFACT_REPOSITORY}" \
+            --location "${_REGION}" \
+            --project "${_GCP_PROJECT_ID}" \
+            --member "serviceAccount:$$email" \
+            --role roles/artifactregistry.reader
+        done
+
+        deployer="${_CLOUD_BUILD_SA_NAME}@${_GCP_PROJECT_ID}.iam.gserviceaccount.com"
+        for role in \
+          roles/logging.logWriter \
+          roles/storage.objectViewer \
+          roles/run.admin; do
+          gcloud projects add-iam-policy-binding "${_GCP_PROJECT_ID}" \
+            --member "serviceAccount:$$deployer" \
+            --role "$$role"
+        done
+        gcloud artifacts repositories add-iam-policy-binding "${_ARTIFACT_REPOSITORY}" \
+          --location "${_REGION}" \
+          --project "${_GCP_PROJECT_ID}" \
+          --member "serviceAccount:$$deployer" \
+          --role roles/artifactregistry.writer
+
+        for account in "${_SERVER_SA_NAME}" "${_MIGRATOR_SA_NAME}"; do
+          runtime_email="$${account}@${_GCP_PROJECT_ID}.iam.gserviceaccount.com"
+          gcloud iam service-accounts add-iam-policy-binding "$$runtime_email" \
+            --project "${_GCP_PROJECT_ID}" \
+            --member "serviceAccount:$$deployer" \
+            --role roles/iam.serviceAccountUser
+        done
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: create-secret-placeholders
+    script: |
+      if ! gcloud secrets describe "${_MAILGUN_SECRET_NAME}" --project "${_GCP_PROJECT_ID}" >/dev/null 2>&1; then
+        gcloud secrets create "${_MAILGUN_SECRET_NAME}" \
+          --replication-policy=automatic \
+          --project "${_GCP_PROJECT_ID}"
+      fi
+      gcloud secrets add-iam-policy-binding "${_MAILGUN_SECRET_NAME}" \
+        --project "${_GCP_PROJECT_ID}" \
+        --member "serviceAccount:${_SERVER_SA_NAME}@${_GCP_PROJECT_ID}.iam.gserviceaccount.com" \
+        --role roles/secretmanager.secretAccessor
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: create-cloud-sql-instance
+    entrypoint: bash
+    args:
+      - -euo
+      - pipefail
+      - -c
+      - |
+        if ! gcloud sql instances describe "${_CLOUD_SQL_INSTANCE}" --project "${_GCP_PROJECT_ID}" >/dev/null 2>&1; then
+          gcloud sql instances create "${_CLOUD_SQL_INSTANCE}" \
+            --database-version=POSTGRES_18 \
+            --edition=enterprise \
+            --tier "${_CLOUD_SQL_TIER}" \
+            --region "${_REGION}" \
+            --availability-type=zonal \
+            --network "projects/${_GCP_PROJECT_ID}/global/networks/${_VPC_NETWORK}" \
+            --no-assign-ip \
+            --database-flags=cloudsql.iam_authentication=on \
+            --backup \
+            --backup-start-time=03:00 \
+            --enable-point-in-time-recovery \
+            --insights-config-query-insights-enabled \
+            --deletion-protection \
+            --project "${_GCP_PROJECT_ID}"
+        else
+          echo "Cloud SQL instance exists; leaving its settings unchanged."
+          echo "If it was not created by this config, verify private IP, IAM authentication, backups, and PITR manually."
+        fi
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: create-database-and-iam-users
+    entrypoint: bash
+    args:
+      - -euo
+      - pipefail
+      - -c
+      - |
+        if ! gcloud sql databases describe "${_DATABASE_NAME}" --instance "${_CLOUD_SQL_INSTANCE}" --project "${_GCP_PROJECT_ID}" >/dev/null 2>&1; then
+          gcloud sql databases create "${_DATABASE_NAME}" \
+            --instance "${_CLOUD_SQL_INSTANCE}" \
+            --project "${_GCP_PROJECT_ID}"
+        fi
+
+        server_user="${_SERVER_SA_NAME}@${_GCP_PROJECT_ID}.iam"
+        migrator_user="${_MIGRATOR_SA_NAME}@${_GCP_PROJECT_ID}.iam"
+
+        if ! gcloud sql users describe "$$server_user" --instance "${_CLOUD_SQL_INSTANCE}" --project "${_GCP_PROJECT_ID}" >/dev/null 2>&1; then
+          gcloud sql users create "$$server_user" \
+            --instance "${_CLOUD_SQL_INSTANCE}" \
+            --type=cloud_iam_service_account \
+            --project "${_GCP_PROJECT_ID}"
+        fi
+        gcloud sql users assign-roles "$$server_user" \
+          --instance "${_CLOUD_SQL_INSTANCE}" \
+          --type=cloud_iam_service_account \
+          --revoke-existing-roles \
+          --database-roles=pg_read_all_data,pg_write_all_data \
+          --project "${_GCP_PROJECT_ID}"
+
+        if ! gcloud sql users describe "$$migrator_user" --instance "${_CLOUD_SQL_INSTANCE}" --project "${_GCP_PROJECT_ID}" >/dev/null 2>&1; then
+          gcloud sql users create "$$migrator_user" \
+            --instance "${_CLOUD_SQL_INSTANCE}" \
+            --type=cloud_iam_service_account \
+            --project "${_GCP_PROJECT_ID}"
+        fi
+        gcloud sql users assign-roles "$$migrator_user" \
+          --instance "${_CLOUD_SQL_INSTANCE}" \
+          --type=cloud_iam_service_account \
+          --revoke-existing-roles \
+          --database-roles=cloudsqlsuperuser \
+          --project "${_GCP_PROJECT_ID}"
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: create-or-update-cleanup-scheduler
+    entrypoint: bash
+    args:
+      - -euo
+      - pipefail
+      - -c
+      - |
+        uri="https://${_REGION}-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/${_GCP_PROJECT_ID}/jobs/${_CLEANUP_JOB_NAME}:run"
+        scheduler_sa="${_SCHEDULER_SA_NAME}@${_GCP_PROJECT_ID}.iam.gserviceaccount.com"
+        if gcloud scheduler jobs describe "${_SCHEDULER_JOB_NAME}" --location "${_REGION}" --project "${_GCP_PROJECT_ID}" >/dev/null 2>&1; then
+          gcloud scheduler jobs update http "${_SCHEDULER_JOB_NAME}" \
+            --location "${_REGION}" \
+            --project "${_GCP_PROJECT_ID}" \
+            --schedule "0 * * * *" \
+            --time-zone Etc/UTC \
+            --uri "$$uri" \
+            --http-method POST \
+            --oauth-service-account-email "$$scheduler_sa" \
+            --oauth-token-scope https://www.googleapis.com/auth/cloud-platform \
+            --description "Run the passkey cleanup Cloud Run job hourly"
+        else
+          gcloud scheduler jobs create http "${_SCHEDULER_JOB_NAME}" \
+            --location "${_REGION}" \
+            --project "${_GCP_PROJECT_ID}" \
+            --schedule "0 * * * *" \
+            --time-zone Etc/UTC \
+            --uri "$$uri" \
+            --http-method POST \
+            --oauth-service-account-email "$$scheduler_sa" \
+            --oauth-token-scope https://www.googleapis.com/auth/cloud-platform \
+            --description "Run the passkey cleanup Cloud Run job hourly"
+        fi
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    id: bind-invokers-when-resources-exist
+    entrypoint: bash
+    args:
+      - -euo
+      - pipefail
+      - -c
+      - |
+        if gcloud run services describe "${_CLOUD_RUN_SERVICE_NAME}" --region "${_REGION}" --project "${_GCP_PROJECT_ID}" >/dev/null 2>&1; then
+          gcloud run services add-iam-policy-binding "${_CLOUD_RUN_SERVICE_NAME}" \
+            --region "${_REGION}" \
+            --project "${_GCP_PROJECT_ID}" \
+            --member "serviceAccount:${_WEB_PROXY_SA_NAME}@${_GCP_PROJECT_ID}.iam.gserviceaccount.com" \
+            --role roles/run.invoker
+        fi
+        if gcloud run jobs describe "${_CLEANUP_JOB_NAME}" --region "${_REGION}" --project "${_GCP_PROJECT_ID}" >/dev/null 2>&1; then
+          gcloud run jobs add-iam-policy-binding "${_CLEANUP_JOB_NAME}" \
+            --region "${_REGION}" \
+            --project "${_GCP_PROJECT_ID}" \
+            --member "serviceAccount:${_SCHEDULER_SA_NAME}@${_GCP_PROJECT_ID}.iam.gserviceaccount.com" \
+            --role roles/run.invoker
+        fi

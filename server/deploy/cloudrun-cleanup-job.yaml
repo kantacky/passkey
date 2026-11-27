@@ -1,21 +1,23 @@
 apiVersion: run.googleapis.com/v1
 kind: Job
 metadata:
-  name: passkey-cleanup
+  name: __CLEANUP_JOB_NAME__
   labels:
-    cloud.googleapis.com/location: REGION
+    cloud.googleapis.com/location: __REGION__
     app: passkey-server
 spec:
   template:
     metadata:
       annotations:
-        run.googleapis.com/network-interfaces: '[{"network":"VPC_NETWORK","subnetwork":"VPC_SUBNET"}]'
+        run.googleapis.com/network-interfaces: '[{"network":"__VPC_NETWORK__","subnetwork":"__VPC_SUBNET__"}]'
         run.googleapis.com/vpc-access-egress: private-ranges-only
         run.googleapis.com/container-dependencies: '{"cleanup":["cloud-sql-proxy"]}'
     spec:
+      taskCount: 1
+      parallelism: 1
       template:
         spec:
-          serviceAccountName: passkey-server@PROJECT_ID.iam.gserviceaccount.com
+          serviceAccountName: __SERVER_SA_NAME__@__GCP_PROJECT_ID__.iam.gserviceaccount.com
           containers:
             - name: cloud-sql-proxy
               image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2.18.3
@@ -23,20 +25,22 @@ spec:
                 - --auto-iam-authn
                 - --private-ip
                 - --health-check
-                - --structured-logs
+                - --http-address=0.0.0.0
                 - --http-port=9090
                 - --admin-port=9091
                 - --quitquitquit
                 - --exit-zero-on-sigterm
-                - PROJECT_ID:REGION:CLOUD_SQL_INSTANCE
+                - --structured-logs
+                - __GCP_PROJECT_ID__:__REGION__:__CLOUD_SQL_INSTANCE__
               startupProbe:
                 httpGet:
                   path: /startup
                   port: 9090
                 periodSeconds: 1
+                timeoutSeconds: 1
                 failureThreshold: 30
             - name: cleanup
-              image: REGION-docker.pkg.dev/PROJECT_ID/passkey/server:IMAGE_TAG
+              image: __REGION__-docker.pkg.dev/__GCP_PROJECT_ID__/__ARTIFACT_REPOSITORY__/__IMAGE_NAME__:__IMAGE_TAG__
               command: ["/bin/sh", "-c"]
               args:
                 - |
@@ -50,8 +54,8 @@ spec:
                 - name: DATABASE_PORT
                   value: "5432"
                 - name: DATABASE_NAME
-                  value: passkey
+                  value: __DATABASE_NAME__
                 - name: DATABASE_USER
-                  value: passkey-server@PROJECT_ID.iam
+                  value: __SERVER_SA_NAME__@__GCP_PROJECT_ID__.iam
           timeoutSeconds: 600
           maxRetries: 1
