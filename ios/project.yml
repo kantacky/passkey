@@ -1,0 +1,75 @@
+name: Passkey
+options:
+  bundleIdPrefix: com.kantacky
+  deploymentTarget:
+    iOS: "18.0"
+  createIntermediateGroups: true
+targets:
+  Passkey:
+    type: application
+    platform: iOS
+    sources:
+      - path: Passkey
+    info:
+      path: Passkey/Info.plist
+      properties:
+        CFBundleDisplayName: Passkey
+        CFBundleName: Passkey
+        UILaunchScreen: {}
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kantacky.Passkey
+        CODE_SIGN_ENTITLEMENTS: Passkey/Passkey.entitlements
+        SWIFT_VERSION: "6.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SWIFT_STRICT_CONCURRENCY: complete
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+        SWIFT_APPROACHABLE_CONCURRENCY: YES
+        OTHER_SWIFT_FLAGS: >-
+          -enable-upcoming-feature ExistentialAny
+          -enable-upcoming-feature InternalImportsByDefault
+          -enable-upcoming-feature MemberImportVisibility
+          -enable-upcoming-feature NonisolatedNonsendingByDefault
+          -enable-upcoming-feature InferIsolatedConformances
+      configs:
+        Debug:
+          SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+          CODE_SIGN_ENTITLEMENTS: Passkey/Passkey.development.entitlements
+  PasskeyTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: PasskeyTests
+    dependencies:
+      - target: Passkey
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.kantacky.PasskeyTests
+        GENERATE_INFOPLIST_FILE: YES
+        SWIFT_VERSION: "6.0"
+        IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+        SWIFT_STRICT_CONCURRENCY: complete
+        SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+        SWIFT_APPROACHABLE_CONCURRENCY: YES
+        OTHER_SWIFT_FLAGS: >-
+          -enable-upcoming-feature ExistentialAny
+          -enable-upcoming-feature InternalImportsByDefault
+          -enable-upcoming-feature MemberImportVisibility
+          -enable-upcoming-feature NonisolatedNonsendingByDefault
+          -enable-upcoming-feature InferIsolatedConformances
+schemes:
+  Passkey:
+    build:
+      targets:
+        Passkey: all
+        PasskeyTests:
+          - test
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - PasskeyTests
