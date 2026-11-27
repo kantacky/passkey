@@ -21,14 +21,14 @@ mise install
 cd web && bun install && cd ..
 gcloud auth login
 gcloud auth application-default login
-gcloud config set project <GCP_PROJECT_ID>
+gcloud config set project kantacky
 ```
 
 Terraform の Google provider は Application Default Credentials (ADC) を使う。`gcloud auth login` だけでは不足する環境があるため、`gcloud auth application-default login` も行う。
 
 ## 2. 設定値の場所
 
-デプロイ固有の値は `infra/terraform.tfvars` に集約する。このファイルはコミットするが、秘密値は入れない。最初に `project_id = "__GCP_PROJECT_ID__"` を実際のプロジェクト ID に書き換える。リージョン、VPC、Cloud SQL、Cloud Run、サービスアカウント、RP ID、Mailgun ドメインなどもここで変更する。
+デプロイ固有の値は `infra/terraform.tfvars` に集約する。このファイルはコミットするが、秘密値は入れない。プロジェクト ID は `kantacky`（`project_id = "kantacky"`）。リージョン、VPC、Cloud SQL、Cloud Run、サービスアカウント、RP ID、Mailgun ドメインなどもここで変更する。
 
 例外が 2 つある。
 
@@ -56,10 +56,10 @@ Web 側の値は `web/cloudflare.config.ts` にある。`CLOUD_RUN_URL` と `APP
 
 ### 3.1 Terraform state バケットの作成
 
-state バケットは Terraform 管理外なので、Terraform を使う前に 1 回だけ `gcloud` で作る。バケット名はグローバルで一意である必要がある。以下は `<GCP_PROJECT_ID>-passkey-terraform-state` を使う例だが、既に取られている場合は別名にする。
+state バケットは Terraform 管理外なので、Terraform を使う前に 1 回だけ `gcloud` で作る。バケット名はグローバルで一意である必要がある。バケット名は `kantacky-passkey-terraform-state` とし、`infra/backend.tf` にも同じ名前を書いてある。別名にする場合は両方を合わせる。
 
 ```sh
-PROJECT_ID=<GCP_PROJECT_ID>
+PROJECT_ID=kantacky
 STATE_BUCKET="${PROJECT_ID}-passkey-terraform-state"
 
 gcloud storage buckets create "gs://${STATE_BUCKET}" \
@@ -69,17 +69,6 @@ gcloud storage buckets create "gs://${STATE_BUCKET}" \
   --public-access-prevention
 
 gcloud storage buckets update "gs://${STATE_BUCKET}" --versioning
-```
-
-次に `infra/backend.tf` を開き、`bucket = "__GCP_PROJECT_ID__-passkey-terraform-state"` を作成したバケット名に書き換える。例:
-
-```hcl
-terraform {
-  backend "gcs" {
-    bucket = "my-project-passkey-terraform-state"
-    prefix = "passkey"
-  }
-}
 ```
 
 既存バケットを使う場合は、自分のプロジェクトのバケットであること、バージョニング・uniform bucket-level access・public access prevention が有効であることを確認する。
@@ -128,7 +117,7 @@ Cloud Run サービスと Job は、まだアプリイメージが存在しな�
 read -rs MAILGUN_API_KEY
 printf '%s' "$MAILGUN_API_KEY" | gcloud secrets versions add mailgun-api-key \
   --data-file=- \
-  --project <GCP_PROJECT_ID>
+  --project kantacky
 unset MAILGUN_API_KEY
 ```
 
@@ -149,7 +138,7 @@ gcloud builds submit --config server/deploy/cloudbuild.yaml .
 ```sh
 gcloud run services describe passkey-server \
   --region asia-northeast1 \
-  --project <GCP_PROJECT_ID> \
+  --project kantacky \
   --format='value(status.url)'
 ```
 
@@ -165,8 +154,8 @@ gcloud run services describe passkey-server \
 mkdir -p "$HOME/.config/passkey"
 chmod 700 "$HOME/.config/passkey"
 gcloud iam service-accounts keys create "$HOME/.config/passkey/passkey-web-proxy-key.json" \
-  --iam-account passkey-web-proxy@<GCP_PROJECT_ID>.iam.gserviceaccount.com \
-  --project <GCP_PROJECT_ID>
+  --iam-account passkey-web-proxy@kantacky.iam.gserviceaccount.com \
+  --project kantacky
 chmod 600 "$HOME/.config/passkey/passkey-web-proxy-key.json"
 ```
 
@@ -243,13 +232,13 @@ Worker だけを変更した場合でも、server 側と API 互換性がある�
 gcloud run jobs executions list \
   --job passkey-migrate \
   --region asia-northeast1 \
-  --project <GCP_PROJECT_ID> \
+  --project kantacky \
   --limit 1
 
 # Cloud Run サービスの状態と URL
 gcloud run services describe passkey-server \
   --region asia-northeast1 \
-  --project <GCP_PROJECT_ID>
+  --project kantacky
 
 # Web が返ること
 curl -fsSI https://passkey.kantacky.com/ | sed -n '1,8p'
@@ -281,11 +270,11 @@ curl -fsS 'https://app-site-association.cdn-apple.com/a/v1/passkey.kantacky.com'
 gcloud run revisions list \
   --service passkey-server \
   --region asia-northeast1 \
-  --project <GCP_PROJECT_ID>
+  --project kantacky
 
 gcloud run services update-traffic passkey-server \
   --region asia-northeast1 \
-  --project <GCP_PROJECT_ID> \
+  --project kantacky \
   --to-revisions=<REVISION_NAME>=100
 ```
 
@@ -317,8 +306,8 @@ Secret が変わっているためにロールバックが拒否される場合�
    mkdir -p "$HOME/.config/passkey"
    chmod 700 "$HOME/.config/passkey"
    gcloud iam service-accounts keys create "$HOME/.config/passkey/passkey-web-proxy-key-new.json" \
-     --iam-account passkey-web-proxy@<GCP_PROJECT_ID>.iam.gserviceaccount.com \
-     --project <GCP_PROJECT_ID>
+     --iam-account passkey-web-proxy@kantacky.iam.gserviceaccount.com \
+     --project kantacky
    chmod 600 "$HOME/.config/passkey/passkey-web-proxy-key-new.json"
    ```
 
@@ -340,24 +329,24 @@ Secret が変わっているためにロールバックが拒否される場合�
    ```sh
    OLD_KEY_ID=<OLD_KEY_ID>
    gcloud iam service-accounts keys disable "$OLD_KEY_ID" \
-     --iam-account passkey-web-proxy@<GCP_PROJECT_ID>.iam.gserviceaccount.com \
-     --project <GCP_PROJECT_ID>
+     --iam-account passkey-web-proxy@kantacky.iam.gserviceaccount.com \
+     --project kantacky
    ```
 
 6. さらに 7 日間問題がなければ削除する。
 
    ```sh
    gcloud iam service-accounts keys delete "$OLD_KEY_ID" \
-     --iam-account passkey-web-proxy@<GCP_PROJECT_ID>.iam.gserviceaccount.com \
-     --project <GCP_PROJECT_ID>
+     --iam-account passkey-web-proxy@kantacky.iam.gserviceaccount.com \
+     --project kantacky
    ```
 
 鍵 ID は次で確認できる。
 
 ```sh
 gcloud iam service-accounts keys list \
-  --iam-account passkey-web-proxy@<GCP_PROJECT_ID>.iam.gserviceaccount.com \
-  --project <GCP_PROJECT_ID> \
+  --iam-account passkey-web-proxy@kantacky.iam.gserviceaccount.com \
+  --project kantacky \
   --managed-by=user
 ```
 

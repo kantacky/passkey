@@ -1,5 +1,5 @@
-# Edit project_id before use. Do not put secret values in this file.
-project_id = "__GCP_PROJECT_ID__"
+# Do not put secret values in this file.
+project_id = "kantacky"
 
 region              = "asia-northeast1"
 artifact_repository = "passkey"
