@@ -9,9 +9,8 @@ import {
 import { ErrorMessage, StatusMessage } from "./Feedback";
 
 type StartResponse = {
-  id?: string;
-  flowId?: string;
-  flow?: { id?: string };
+  id: string;
+  status: "pending";
   expiresAt?: string;
 };
 
@@ -51,20 +50,15 @@ export function EmailVerificationFlow({
       return response;
     },
     onSuccess: (response) => {
-      const id = response.flowId ?? response.id ?? response.flow?.id;
       setError("");
       setCode("");
       notifiedRef.current = false;
-      if (id) {
-        setFlowId(id);
-        setExpiresAt(response.expiresAt ?? null);
-        setStatus(
-          "メールを送信しました。メールに記載された 6 桁コードを入力してください。",
-        );
-        window.setTimeout(() => codeInputRef.current?.focus(), 0);
-      } else {
-        setError("確認フローを開始できませんでした。もう一度お試しください。");
-      }
+      setFlowId(response.id);
+      setExpiresAt(response.expiresAt ?? null);
+      setStatus(
+        "メールを送信しました。メールに記載された 6 桁コードを入力してください。",
+      );
+      window.setTimeout(() => codeInputRef.current?.focus(), 0);
     },
     onError: (cause) => {
       setError(
@@ -117,7 +111,10 @@ export function EmailVerificationFlow({
           `/email-verifications/${encodeURIComponent(flowId)}`,
         );
         if (cancelled || notifiedRef.current) return;
-        if (flow.status === "verified" || flow.status === "consumed") {
+        if (
+          flow.status === "verified" ||
+          (flow.status === "consumed" && purpose !== "signup")
+        ) {
           notifiedRef.current = true;
           onVerified(flowId, email.trim());
         } else if (flow.status === "expired") {

@@ -104,8 +104,12 @@ async function proxyApi(request: Request, env: Env): Promise<Response> {
   headers.delete("X-Real-IP");
   headers.delete("X-Client-IP");
   headers.delete("CF-Connecting-IP");
+  headers.delete("CF-IPCountry");
+  headers.delete("X-Client-Country");
   headers.delete("X-Serverless-Authorization");
   headers.set("X-Client-IP", clientIp);
+  const country = cloudflareCountry(request);
+  if (country) headers.set("X-Client-Country", country);
   headers.set("X-Serverless-Authorization", `Bearer ${idToken}`);
 
   return fetch(target, {
@@ -117,6 +121,13 @@ async function proxyApi(request: Request, env: Env): Promise<Response> {
         : request.body,
     redirect: "manual",
   });
+}
+
+export function cloudflareCountry(request: Request): string | null {
+  const cf = (request as Request & { cf?: { country?: unknown } }).cf;
+  return typeof cf?.country === "string" && cf.country.length > 0
+    ? cf.country
+    : null;
 }
 
 async function isRateLimited(env: Env, clientIp: string): Promise<boolean> {

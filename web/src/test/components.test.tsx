@@ -19,7 +19,7 @@ describe("components", () => {
   test("コード入力欄は numeric と one-time-code を持つ", async () => {
     const originalFetch = globalThis.fetch;
     globalThis.fetch = (async () =>
-      new Response(JSON.stringify({ flowId: "flow-id" }), {
+      new Response(JSON.stringify({ id: "flow-id", status: "pending" }), {
         status: 202,
         headers: { "Content-Type": "application/json" },
       })) as unknown as typeof fetch;

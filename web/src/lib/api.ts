@@ -89,14 +89,19 @@ export type Me = {
 
 export type Passkey = {
   id: string;
-  name: string | null;
-  displayName?: string;
+  name: string;
+  customName?: string | null;
   providerName?: string | null;
-  iconUrl?: string | null;
+  iconLight?: string | null;
+  iconDark?: string | null;
   createdAt: string;
-  lastUsedAt: string | null;
+  lastUsedAt?: string | null;
   backupEligible: boolean;
   backupState: boolean;
+};
+
+export type PasskeysResponse = {
+  passkeys: Passkey[];
 };
 
 export type SessionInfo = {
@@ -104,7 +109,11 @@ export type SessionInfo = {
   deviceLabel: string;
   createdAt: string;
   lastSeenAt: string;
-  current: boolean;
+  isCurrent: boolean;
+};
+
+export type SessionsResponse = {
+  sessions: SessionInfo[];
 };
 
 export type VerificationPurpose = "signup" | "recovery" | "email_change";

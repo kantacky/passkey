@@ -4,7 +4,7 @@ import {
   resetGoogleIdTokenCacheForTests,
   signJwt,
 } from "../../worker/google-auth";
-import { rateLimitKey } from "../../worker/index";
+import { cloudflareCountry, rateLimitKey } from "../../worker/index";
 
 const originalFetch = globalThis.fetch;
 
@@ -19,6 +19,14 @@ describe("worker helpers", () => {
     expect(rateLimitKey("2001:db8:abcd:1234:1111:2222:3333:4444")).toBe(
       "2001:db8:abcd:1234::",
     );
+  });
+
+  test("Cloudflare の国コードだけを転送用に読む", () => {
+    const request = new Request("https://passkey.kantacky.com/api/v1/me");
+    Object.defineProperty(request, "cf", { value: { country: "JP" } });
+
+    expect(cloudflareCountry(request)).toBe("JP");
+    expect(cloudflareCountry(new Request("https://passkey.kantacky.com"))).toBeNull();
   });
 
   test("RS256 JWT を署名できる", async () => {

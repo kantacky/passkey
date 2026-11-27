@@ -215,7 +215,7 @@ function PasskeyCard({
   onDelete: () => void;
 }) {
   const [editing, setEditing] = useState(false);
-  const [name, setName] = useState(passkey.name ?? "");
+  const [name, setName] = useState(passkey.customName ?? "");
   const [error, setError] = useState("");
   const rename = useMutation({
     mutationFn: () =>
@@ -235,8 +235,8 @@ function PasskeyCard({
   return (
     <article className="card">
       <div className="passkey-icon" aria-hidden="true">
-        {passkey.iconUrl ? (
-          <img src={passkey.iconUrl} alt="" />
+        {passkeyIconUrl(passkey) ? (
+          <img src={passkeyIconUrl(passkey)} alt="" />
         ) : (
           <GenericPasskeyIcon />
         )}
@@ -364,12 +364,14 @@ function RevokeOthersButton() {
 }
 
 function displayName(passkey: Passkey): string {
-  if (passkey.name) return passkey.name;
-  if (passkey.displayName) return passkey.displayName;
-  const date = new Date(passkey.createdAt).toLocaleDateString("ja-JP");
-  return passkey.providerName
-    ? `${passkey.providerName}（${date}）`
-    : `パスキー（${date}）`;
+  return passkey.name;
+}
+
+function passkeyIconUrl(passkey: Passkey): string | undefined {
+  const dark = window.matchMedia?.("(prefers-color-scheme: dark)").matches;
+  return dark
+    ? (passkey.iconDark ?? passkey.iconLight ?? undefined)
+    : (passkey.iconLight ?? passkey.iconDark ?? undefined);
 }
 
 function formatDate(value: string): string {

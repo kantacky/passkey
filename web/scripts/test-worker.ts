@@ -113,6 +113,8 @@ const config :Workerd.Config = (
       "X-Forwarded-For": "203.0.113.1",
       "X-Real-IP": "203.0.113.1",
       "X-Client-IP": "203.0.113.1",
+      "X-Client-Country": "ZZ",
+      "CF-IPCountry": "ZZ",
       "X-Serverless-Authorization": "Bearer attacker-controlled",
       Cookie: "__Host-session=session-cookie",
       Authorization: "Bearer user-token",
@@ -152,6 +154,14 @@ const config :Workerd.Config = (
   assert(
     upstreamRequest.headers["cf-connecting-ip"] === undefined,
     "CF-Connecting-IP was forwarded",
+  );
+  assert(
+    upstreamRequest.headers["cf-ipcountry"] === undefined,
+    "CF-IPCountry was forwarded",
+  );
+  assert(
+    upstreamRequest.headers["x-client-country"] !== "ZZ",
+    "attacker-controlled X-Client-Country was forwarded",
   );
   assert(
     upstreamRequest.headers["x-serverless-authorization"] ===

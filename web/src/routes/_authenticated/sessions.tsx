@@ -52,7 +52,7 @@ function SessionsPage() {
                 <div className="card-body">
                   <h2>
                     {session.deviceLabel}
-                    {session.current ? "（このセッション）" : ""}
+                    {session.isCurrent ? "（このセッション）" : ""}
                   </h2>
                   <dl>
                     <div>
@@ -64,7 +64,7 @@ function SessionsPage() {
                       <dd>{formatDate(session.lastSeenAt)}</dd>
                     </div>
                   </dl>
-                  {!session.current ? (
+                  {!session.isCurrent ? (
                     <button
                       type="button"
                       className="danger"

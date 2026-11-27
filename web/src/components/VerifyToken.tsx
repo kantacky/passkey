@@ -6,7 +6,8 @@ import { ErrorMessage, StatusMessage } from "./Feedback";
 
 type VerifyResponse = {
   status?: string;
-  purpose?: "signup" | "recovery" | "email_change";
+  kind?: "normal" | "recovery";
+  email?: string;
 };
 
 export function VerifyToken({
@@ -53,7 +54,7 @@ export function VerifyToken({
         );
         await queryClient.invalidateQueries({ queryKey: ["me"] });
         setState("success");
-        if (response.purpose === "recovery") {
+        if (response.kind === "recovery") {
           setMessage(
             "アカウントの確認が完了しました。新しいパスキーを作成します。",
           );
@@ -61,7 +62,7 @@ export function VerifyToken({
             () => void navigate({ to: "/create-passkey" }),
             800,
           );
-        } else if (response.purpose === "email_change") {
+        } else if (response.kind === "normal" && response.email) {
           setMessage("メールアドレスを変更しました。");
           window.setTimeout(() => void navigate({ to: "/account" }), 800);
         } else {
