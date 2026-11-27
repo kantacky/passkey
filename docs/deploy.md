@@ -28,7 +28,7 @@ Terraform の Google provider は Application Default Credentials (ADC) を使�
 
 ## 2. 設定値の場所
 
-デプロイ固有の値は `infra/terraform.tfvars` に集約する。このファイルはコミットするが、秘密値は入れない。プロジェクト ID は `kantacky`（`project_id = "kantacky"`）。リージョン、VPC、Cloud SQL、Cloud Run、サービスアカウント、RP ID、Mailgun ドメインなどもここで変更する。
+デプロイ固有の値は `infra/terraform.tfvars` に集約する。このファイルはコミットするが、秘密値は入れない。プロジェクト ID は `kantacky`（`project_id = "kantacky"`）。リージョン、既存 VPC / サブネット、既存 Cloud SQL インスタンス、Cloud Run、サービスアカウント、RP ID、Mailgun ドメインなどもここで変更する。PostgreSQL 権限管理に使う組み込み `postgres` ユーザーのパスワードは tfvars に書かず、Terraform 実行時に環境変数 `PGPASSWORD` で渡す。
 
 例外が 2 つある。
 
@@ -43,8 +43,9 @@ Terraform の Google provider は Application Default Credentials (ADC) を使�
 | --- | --- |
 | リージョン | `asia-northeast1` |
 | Artifact Registry リポジトリ | `passkey` |
-| VPC / サブネット | `passkey-vpc` / `passkey-subnet` |
-| Cloud SQL インスタンス / DB | `passkey-postgres` / `passkey` |
+| VPC / サブネット | `kantacky` / `kantacky`（既存） |
+| Cloud SQL インスタンス / DB | `kantacky-psql` / `passkey`（インスタンスは既存の共有インスタンス） |
+| PostgreSQL 管理ユーザー | `postgres`（パスワードは `PGPASSWORD` でのみ渡す） |
 | Cloud Run サービス | `passkey-server` |
 | Cloud Run Job | `passkey-migrate`, `passkey-cleanup` |
 | サービスアカウント | `passkey-cloudbuild`, `passkey-server`, `passkey-migrator`, `passkey-scheduler`, `passkey-web-proxy` |
@@ -75,31 +76,35 @@ gcloud storage buckets update "gs://${STATE_BUCKET}" --versioning
 
 ### 3.2 Terraform でインフラを作成
 
-`infra/terraform.tfvars` の `project_id` を実際のプロジェクト IDに書き換えたことを確認し、次を実行する。backend や変数を CLI 引数で渡す必要はない。
+Cloud SQL のインスタンス、VPC、サブネット、Private Services Access は作成しない。既存の共有インスタンス `kantacky-psql`、ネットワーク / サブネット `kantacky` を参照する。`infra/terraform.tfvars` の `project_id` を実際のプロジェクト IDに書き換えたことを確認し、次を実行する。backend や変数を CLI 引数で渡す必要はない。
+
+PostgreSQL 権限を管理する provider は ADC と、組み込み `postgres` ユーザーのパスワードを使う。パスワードは tfvars・Terraform state・コマンド履歴に書かず、環境変数 `PGPASSWORD` だけで渡す。
 
 ```sh
+gcloud auth application-default login
+read -rs PGPASSWORD
+export PGPASSWORD
 cd infra
 terraform init
 terraform plan
 terraform apply
 cd ..
+unset PGPASSWORD
 ```
 
 Terraform は次を作成する。
 
 - 必要な Google Cloud API の有効化
-- VPC、サブネット、Private Services Access 用 IP 範囲と peering
 - Artifact Registry リポジトリ
 - `passkey-cloudbuild`、`passkey-server`、`passkey-migrator`、`passkey-scheduler`、`passkey-web-proxy` のサービスアカウントと IAM
-- Cloud SQL for PostgreSQL 18（private IP のみ、IAM DB 認証、自動バックアップ、PITR、削除保護）
-- `passkey` データベースと IAM DB ユーザー
-- DB ロール（`passkey-server@<project>.iam` に `pg_read_all_data` / `pg_write_all_data`、`passkey-migrator@<project>.iam` に `cloudsqlsuperuser`）
+- 既存の共有 Cloud SQL インスタンス `kantacky-psql` 内の `passkey` データベースと IAM DB ユーザー
+- `passkey` データベースに限定した PostgreSQL 権限（`passkey-server` には public スキーマの USAGE・テーブル / シーケンスの DML、`passkey-migrator` には public スキーマの CREATE / USAGE、migrator が今後作るオブジェクトへの server の default privileges）
 - Secret Manager の `mailgun-api-key` の枠（値は入っていない）
 - Cloud Run サービスと migrate / cleanup Job（プレースホルダイメージ）
 - `passkey-web-proxy` と `passkey-scheduler` に対する resource 単位の `roles/run.invoker`
 - 1 時間ごとの Cloud Scheduler `passkey-cleanup-hourly`
 
-DB ロールも Terraform の `google_sql_user.database_roles` で付与するため、初回の手動 SQL / `gcloud sql users assign-roles` は不要である。
+PostgreSQL 権限は Terraform の `cyrilgdn/postgresql` provider が `passkey` データベースだけに付与する。`google_sql_user.database_roles`、`pg_read_all_data`、`pg_write_all_data`、`cloudsqlsuperuser` は使わず、他データベースへの権限も付けない。初回の手動 SQL / `gcloud sql users assign-roles` は不要である。
 
 Cloud Run サービスと Job は、まだアプリイメージが存在しないためプレースホルダイメージで作られる。Terraform は `lifecycle.ignore_changes` で revision template（サービスは traffic も）を無視し、以後のイメージ・コンテナ構成は通常デプロイ側が所有する。初回の Terraform 作成時点では Secret の値がなくてもよいように、プレースホルダ側は `MAILGUN_API_KEY` を参照しない。Secret 参照は通常デプロイの Cloud Run テンプレートで追加される。
 
@@ -278,7 +283,7 @@ gcloud run services update-traffic passkey-server \
   --to-revisions=<REVISION_NAME>=100
 ```
 
-マイグレーション自体は自動では巻き戻さない。expand 段階の変更は旧バージョンでも動く設計にする。contract 済みの変更やデータを壊す変更がある場合は、個別の復旧手順とバックアップ / PITR からの復元を検討する。
+マイグレーション自体は自動では巻き戻さない。expand 段階の変更は旧バージョンでも動く設計にする。contract 済みの変更やデータを壊す変更がある場合は、影響範囲に応じた個別の復旧手順を検討する。
 
 ### 6.2 Cloudflare Worker
 
@@ -353,8 +358,8 @@ gcloud iam service-accounts keys list \
 ## 8. 運用メモ
 
 - インフラ変更は `infra/terraform.tfvars` または `infra/*.tf` を編集し、`cd infra && terraform plan && terraform apply` で行う。`terraform apply` だけでは Cloud Run のアプリイメージは更新されない。アプリ変更は通常デプロイを使う。
-- Terraform state には Mailgun API キーと `passkey-web-proxy` 鍵を入れない。Secret Manager の値登録とサービスアカウント鍵作成は、この文档の `gcloud` / Cloudflare 手順で行う。
-- `db-f1-micro` の PostgreSQL は既定で `max_connections` が 25 程度なので、サーバー側プール 10 に対して Cloud Run `maxScale` は 2 にしてある。スケールアウトが必要なら、先に Cloud SQL の tier / `max_connections` と接続予算を見直す。
+- Terraform state には Mailgun API キー、`passkey-web-proxy` 鍵、PostgreSQL `postgres` ユーザーのパスワードを入れない。Secret Manager の値登録とサービスアカウント鍵作成は、この文档の `gcloud` / Cloudflare 手順で行い、PostgreSQL のパスワードは Terraform 実行時に `PGPASSWORD` で渡す。
+- 共有インスタンス `kantacky-psql` は `max_connections=100` で、他アプリも同じ接続予算を使う。サーバー側プール 10 に対して Cloud Run `maxScale` は 2 にしてある。スケールアウトが必要なら、先に他アプリ・migrate / cleanup Job を含む接続予算と Cloud SQL の `max_connections` を見直す。
 - `passkey-cloudbuild` は通常デプロイに必要な `roles/logging.logWriter`、`roles/storage.objectViewer`、`roles/run.admin`、Artifact Registry の `roles/artifactregistry.writer`、server / migrator 両サービスアカウント上の `roles/iam.serviceAccountUser` を持つ。広いインフラ権限は持たせない。
-- Cloud SQL は Terraform 側と GCP 側の両方で削除保護が有効である。削除するには両方を解除する必要があるが、本番では原則行わない。
+- 既存の Cloud SQL インスタンス `kantacky-psql` は GCP 側で削除保護が有効である。Terraform はインスタンス自体を管理しない。バックアップ・PITR は有効化しないため、データ復旧が必要な変更では個別にエクスポート等の手順を検討する。
 - Secret Manager の `mailgun-api-key` を更新した場合、Cloud Run サービスは次のリビジョン作成時に新しい値を読む。通常デプロイを行うか、サービスを更新して再起動する。

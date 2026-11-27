@@ -692,19 +692,19 @@ server/
 
 ### 9.2 Cloud Run / Cloud SQL
 
-GCP インフラは `infra/` の Terraform で管理する。Terraform は 1.17.2、`hashicorp/google` provider は 8.12.0 に固定し、state は GCS backend に置く。state バケットだけは Terraform 管理外とし、バージョニング・uniform bucket-level access・public access prevention を有効にして手動作成する。Cloud Build によるインフラ bootstrap 用の `cloudbuild-infra.yaml` と `passkey-infra` サービスアカウントは使わない。
+GCP インフラは `infra/` の Terraform で管理する。Terraform は 1.17.2、`hashicorp/google` provider は 8.12.0、PostgreSQL 権限管理用の `cyrilgdn/postgresql` provider は 1.27.0 に固定し、state は GCS backend に置く。state バケットだけは Terraform 管理外とし、バージョニング・uniform bucket-level access・public access prevention を有効にして手動作成する。Cloud Build によるインフラ bootstrap 用の `cloudbuild-infra.yaml` と `passkey-infra` サービスアカウントは使わない。
 
-Terraform が管理する主なリソースは、API 有効化、VPC / Private Services Access、Artifact Registry、Cloud SQL、データベースと IAM DB ユーザー、サービスアカウントと IAM、Secret Manager の `mailgun-api-key` の枠、Cloud Run サービス / Job、Cloud Scheduler である。Cloud Run サービスと Job は Terraform がプレースホルダイメージで作成し、`lifecycle.ignore_changes` で revision template（とサービスの traffic）をアプリデプロイ側に委ねる。実際のイメージ・コンテナ構成は `server/deploy/cloudbuild.yaml` が `server/deploy/cloudrun-*.yaml` から反映する。`passkey-web-proxy` の鍵は Terraform state に秘密を残さないため Terraform では作らず、gcloud で作成する。
+Terraform が管理する主なリソースは、API 有効化、Artifact Registry、既存の共有 Cloud SQL インスタンス `kantacky-psql` 上の `passkey` データベースと IAM DB ユーザー、`passkey` データベースに限定した PostgreSQL 権限、サービスアカウントと IAM、Secret Manager の `mailgun-api-key` の枠、Cloud Run サービス / Job、Cloud Scheduler である。VPC、サブネット、Private Services Access、Cloud SQL インスタンスは既存のものを data source または tfvars の名前で参照し、Terraform で作成・変更しない。Cloud Run サービスと Job は Terraform がプレースホルダイメージで作成し、`lifecycle.ignore_changes` で revision template（とサービスの traffic）をアプリデプロイ側に委ねる。実際のイメージ・コンテナ構成は `server/deploy/cloudbuild.yaml` が `server/deploy/cloudrun-*.yaml` から反映する。`passkey-web-proxy` の鍵は Terraform state に秘密を残さないため Terraform では作らず、gcloud で作成する。
 
 - Cloud Run サービスにサービスアカウント `passkey-server@` を割り当て。
 - サイドカー `cloud-sql-proxy --auto-iam-authn --private-ip --health-check <instance>`、アプリは `127.0.0.1:5432` に接続。パスワード不要。
   - コンテナの起動順はアプリが proxy に依存する設定にし、proxy の startup probe が成功してからアプリを起動する。
   - 終了時はアプリが先に終わるまで proxy を維持する。
-- DB ユーザーは IAM サービスアカウントユーザー（`passkey-server@<project>.iam`）。GCP 側の IAM ロールは `roles/cloudsql.client`、`roles/cloudsql.instanceUser`。PostgreSQL 側のロールは Terraform の `google_sql_user.database_roles` で `pg_read_all_data` と `pg_write_all_data` に固定し、DML のみ許可して DDL 権限は持たせない。
-- Cloud SQL インスタンスは PostgreSQL 18、`cloudsql.iam_authentication=on`、パブリック IP なし。Cloud Run は Direct VPC egress で、Private Services Access 経由で接続する。
-- 接続プールはインスタンスあたり 10。`max-instances` × 10 が Cloud SQL の `max_connections` を超えないようにする。
+- DB ユーザーは IAM サービスアカウントユーザー（`passkey-server@<project>.iam`、`passkey-migrator@<project>.iam`）。GCP 側の IAM ロールは `roles/cloudsql.client`、`roles/cloudsql.instanceUser`。PostgreSQL 側の権限は `cyrilgdn/postgresql` provider で `passkey` データベースに限定して管理する。`passkey-server` には public スキーマの USAGE、テーブルへの SELECT / INSERT / UPDATE / DELETE、シーケンスへの USAGE / SELECT だけを付与し、DDL 権限は持たせない。`pg_read_all_data`、`pg_write_all_data`、`cloudsqlsuperuser` などの広いロールは使わない。
+- Cloud SQL は既存の共有インスタンス `kantacky-psql`（PostgreSQL 18、`cloudsql.iam_authentication=on`、private IP と public IP の両方が有効）を使う。Cloud Run は既存の `kantacky` ネットワーク / サブネットへの Direct VPC egress で、既存の Private Services Access 経由で private IP に接続する。
+- 接続プールは Cloud Run インスタンスあたり 10。共有インスタンスの `max_connections` は 100 で、他アプリ（ZITADEL、keiz、furarico など）も同じ接続予算を使う。`max-instances` × 10 に migrate / cleanup Job と他アプリの接続数を加えても 100 を超えないようにする。
 - `min-instances` は 1（コールドスタートで Conditional UI が遅れるのを避ける）。
-- Cloud SQL は自動バックアップと PITR、Terraform / GCP 両面の削除保護を有効にする。HA は使わない（個人プロジェクトとしてのコスト判断）。
+- Cloud SQL は既存の共有インスタンス `kantacky-psql` を使い、バックアップ・PITR は使わない（個人プロジェクトのコスト判断）。HA も使わない。既存インスタンスでは削除保護が有効だが、Terraform はインスタンス自体を管理しない。
 - 機密設定（Mailgun API キー）は Secret Manager から環境変数で注入。Terraform は Secret の枠と参照権限だけを作り、鍵の値は state に入れない。
 - Origin・RP ID は環境変数 `RP_ID`, `ORIGIN`（`webauthn-swift` は単一 Origin のみ扱うため 1 つ）。
 - クライアント IP: Worker が付与する `X-Client-IP` のみを信頼する。Cloud Run は IAM 認証で Worker 以外からのリクエストを拒否するため、このヘッダーは偽装できない。`X-Forwarded-For` は使わない。
@@ -731,7 +731,7 @@ Terraform が管理する主なリソースは、API 有効化、VPC / Private S
 
 ### 9.4 マイグレーション
 
-- Cloud Run Job `migrate` は、DDL 権限を持つ別の IAM サービスアカウント `passkey-migrator@` で実行する。PostgreSQL にはグローバルな DDL-only の事前定義ロールがないため、Terraform ではこの専用アカウントにだけ `cloudsqlsuperuser` を付与する。
+- Cloud Run Job `migrate` は、DDL 権限を持つ別の IAM サービスアカウント `passkey-migrator@` で実行する。PostgreSQL 側の権限は `cyrilgdn/postgresql` provider で `passkey` データベースに限定し、`passkey-migrator` には public スキーマへの CREATE / USAGE（DDL）だけを付与する。`postgresql_default_privileges` により、migrator が今後作成するテーブル・シーケンスにも `passkey-server` の DML 権限が自動付与される。他データベースには権限を付けない。
 - デプロイの順序は「migrate → サービスのデプロイ」（`server/deploy/cloudbuild.yaml` の 1 回のビルドで実行）。変更は後方互換（expand → contract）に限り、旧バージョンのサービスが新スキーマで動くようにする。
 - Job でも proxy サイドカーを使い、アプリ終了後に proxy を終了させる（`--quitquitquit` エンドポイント）。
 
