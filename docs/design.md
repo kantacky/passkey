@@ -463,7 +463,7 @@ sequenceDiagram
 
 ### 6.4 通知
 
-次の場合に Email 通知を送る。本文には操作の種類、日時、端末ラベル、おおよその地域（国）と、心当たりがない場合の対処を記載する。
+次の場合に Email 通知を送る。本文には操作の種類、日時、端末ラベル、おおよその地域（国）と、心当たりがない場合の対処を記載する。国はサーバーが受け取った `X-Client-Country`（§9.2、§10）を日本語表示にしたもので、取得できない場合は「不明」とする。
 
 - パスキー追加・削除
 - アカウント回復の開始・完了
@@ -704,6 +704,7 @@ server/
 - 機密設定（Mailgun API キー）は Secret Manager から環境変数で注入。
 - Origin・RP ID は環境変数 `RP_ID`, `ORIGIN`（`webauthn-swift` は単一 Origin のみ扱うため 1 つ）。
 - クライアント IP: Worker が付与する `X-Client-IP` のみを信頼する。Cloud Run は IAM 認証で Worker 以外からのリクエストを拒否するため、このヘッダーは偽装できない。`X-Forwarded-For` は使わない。
+- クライアントの国: Worker が付与する `X-Client-Country`（ISO 3166-1 alpha-2）のみを信頼し、§6.4 の通知メールの「おおよその地域（国）」に使う。不明な場合は「不明」と記載する。
 
 到達制御は Cloud Run の IAM 認証（`--no-allow-unauthenticated`）:
 
@@ -801,7 +802,7 @@ web/
     - `/api/v1/*`: Cloud Run へ転送する。
     - `/.well-known/apple-app-site-association`: AASA を `Content-Type: application/json` で返す。
     - それ以外の `/api/*`・`/.well-known/*`: `404`（API は §5 のエラー JSON）。
-  - 転送時のヘッダー処理: クライアントが送った `X-Forwarded-For`、`X-Real-IP`、`X-Client-IP`、`CF-Connecting-IP`、`X-Serverless-Authorization` を削除し、`CF-Connecting-IP` の値を `X-Client-IP` に、ID トークンを `X-Serverless-Authorization` に付与する。`Cookie`、`Authorization`、`Origin`、`User-Agent` はそのまま転送する。
+  - 転送時のヘッダー処理: クライアントが送った `X-Forwarded-For`、`X-Real-IP`、`X-Client-IP`、`X-Client-Country`、`CF-Connecting-IP`、`CF-IPCountry`、`X-Serverless-Authorization` を削除し、`CF-Connecting-IP` の値を `X-Client-IP` に、Cloudflare が付与する国コード（`request.cf.country`）を `X-Client-Country` に、ID トークンを `X-Serverless-Authorization` に付与する。`Cookie`、`Authorization`、`Origin`、`User-Agent` はそのまま転送する。
   - Secret: Cloud Run 呼び出し用サービスアカウント鍵。環境変数: Cloud Run の URL（ID トークンの audience）、`RP_ID`、Apple の TeamID。
   - デプロイ後に AASA を Apple の CDN（`https://app-site-association.cdn-apple.com/a/v1/<RP ID>`）で確認する。開発中は Associated Domains に `?mode=developer` を付ける。
 - 静的アセットのキャッシュ: `index.html` は `no-cache`、ハッシュ付きファイルは `max-age=31536000, immutable`。
