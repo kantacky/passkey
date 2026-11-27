@@ -26,7 +26,9 @@ describe("worker helpers", () => {
     Object.defineProperty(request, "cf", { value: { country: "JP" } });
 
     expect(cloudflareCountry(request)).toBe("JP");
-    expect(cloudflareCountry(new Request("https://passkey.kantacky.com"))).toBeNull();
+    expect(
+      cloudflareCountry(new Request("https://passkey.kantacky.com")),
+    ).toBeNull();
   });
 
   test("RS256 JWT を署名できる", async () => {
