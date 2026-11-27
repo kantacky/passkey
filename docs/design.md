@@ -68,7 +68,7 @@ flowchart LR
 | Swift（server） | swiftly（ローカルにインストール済み）。`server/.swift-version` に `6.4.3` を書き、swiftly がディレクトリごとに切り替える。コンテナは同じ版の `swift:6.4.3-noble` |
 | Swift（iOS） | Xcode 同梱のツールチェーン |
 
-CI も同じく mise（`jdx/mise-action`）と swiftly で揃える。`package.json` の `packageManager` は使わない（バージョンの指定元を mise に一本化する）。
+CI を導入する場合も mise（`jdx/mise-action`）と swiftly で揃える。`package.json` の `packageManager` は使わない（バージョンの指定元を mise に一本化する）。
 
 ## 2. ユーザー体験（機能一覧）
 
@@ -688,7 +688,7 @@ server/
 
 - ローカル開発: `container build --arch amd64 -t passkey-server .`、`container run` で PostgreSQL と共に起動。
 - `Containerfile` はマルチステージ（`swift:6.4.3-noble` でビルド → `--static-swift-stdlib`、`ubuntu:noble` に `ca-certificates` と `tzdata` を入れて配置、非 root 実行）。
-- Cloud Run は linux/amd64 のため、必ず `--arch amd64` でビルドし Artifact Registry へ push。本番イメージは CI でビルドする。
+- Cloud Run は linux/amd64 のため、必ず `--arch amd64` でビルドし Artifact Registry へ push。本番イメージはローカルから `gcloud builds submit` で Cloud Build に投げてビルドする（設定は `server/deploy/cloudbuild.yaml`。手順は `docs/deploy.md`）。
 
 ### 9.2 Cloud Run / Cloud SQL
 
@@ -728,7 +728,7 @@ server/
 ### 9.4 マイグレーション
 
 - Cloud Run Job `migrate` は、DDL 権限を持つ別の IAM サービスアカウント `passkey-migrator@` で実行する。
-- CI の順序は「migrate → サービスのデプロイ」。変更は後方互換（expand → contract）に限り、旧バージョンのサービスが新スキーマで動くようにする。
+- デプロイの順序は「migrate → サービスのデプロイ」（`server/deploy/cloudbuild.yaml` の 1 回のビルドで実行）。変更は後方互換（expand → contract）に限り、旧バージョンのサービスが新スキーマで動くようにする。
 - Job でも proxy サイドカーを使い、アプリ終了後に proxy を終了させる（`--quitquitquit` エンドポイント）。
 
 ### 9.5 監視
