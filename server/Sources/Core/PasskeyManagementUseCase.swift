@@ -33,7 +33,7 @@ extension AuthCore {
         return present(passkey)
     }
 
-    public func deletePasskey(credentialID: Data, context: AuthenticatedContext) async throws -> [Data] {
+    public func deletePasskey(credentialID: Data, context: AuthenticatedContext, country: String? = nil) async throws -> [Data] {
         guard context.session.kind == .normal else { throw AuthError.recoverySessionRestricted }
         try requireReauthenticated(context)
         try requireNotRecentlyRecovered(context)
@@ -41,7 +41,7 @@ extension AuthCore {
         switch result {
         case .deleted(let remaining):
             securityEvent("passkey_deleted", metadata: ["user_id": "\(context.user.id.uuidString)"])
-            await mailQueue.enqueue(notificationMail(email: context.user.email, operation: "パスキー削除", deviceLabel: context.session.deviceLabel))
+            await mailQueue.enqueue(notificationMail(email: context.user.email, operation: "パスキー削除", deviceLabel: context.session.deviceLabel, country: country))
             return remaining
         case .notFound: throw AuthError.notFound
         case .lastPasskey: throw AuthError.lastPasskey

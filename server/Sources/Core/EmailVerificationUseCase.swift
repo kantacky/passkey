@@ -113,6 +113,7 @@ extension AuthCore {
         code: String?,
         authenticatedContext: AuthenticatedContext? = nil,
         ip: String,
+        country: String? = nil,
         userAgent: String?
     ) async throws -> EmailVerificationVerifyResult {
         guard (token == nil) != (code == nil) else { throw AuthError.invalidRequest("token または code のどちらか一方を指定してください") }
@@ -163,7 +164,7 @@ extension AuthCore {
                 throw AuthError.flowExpired
             }
             securityEvent("recovery_started", metadata: ["user_id": "\(user.id.uuidString)"])
-            await mailQueue.enqueue(notificationMail(email: user.email, operation: "アカウント回復の開始", deviceLabel: device))
+            await mailQueue.enqueue(notificationMail(email: user.email, operation: "アカウント回復の開始", deviceLabel: device, country: country))
             return .recoverySession(issued)
 
         case .emailChange:
@@ -190,8 +191,8 @@ extension AuthCore {
             let issued = IssuedSession(session: rotated, token: newToken)
             securityEvent("email_changed", metadata: ["user_id": "\(context.user.id.uuidString)"])
             let device = SecurityUtils.deviceLabel(userAgent: userAgent, client: flow.client)
-            await mailQueue.enqueue(notificationMail(email: context.user.email, operation: "メールアドレス変更", deviceLabel: device, detail: "新しいアドレス: \(maskEmail(flow.email))"))
-            await mailQueue.enqueue(notificationMail(email: flow.email, operation: "メールアドレス変更の完了", deviceLabel: device))
+            await mailQueue.enqueue(notificationMail(email: context.user.email, operation: "メールアドレス変更", deviceLabel: device, detail: "新しいアドレス: \(maskEmail(flow.email))", country: country))
+            await mailQueue.enqueue(notificationMail(email: flow.email, operation: "メールアドレス変更の完了", deviceLabel: device, country: country))
             return .emailChanged(issued, email: flow.email)
         }
     }

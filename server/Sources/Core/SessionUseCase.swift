@@ -43,7 +43,7 @@ extension AuthCore {
         securityEvent("session_revoked", metadata: ["user_id": "\(context.user.id.uuidString)", "scope": "others"])
     }
 
-    public func deleteUser(email confirmationEmail: String, context: AuthenticatedContext) async throws {
+    public func deleteUser(email confirmationEmail: String, context: AuthenticatedContext, country: String? = nil) async throws {
         guard context.session.kind == .normal else { throw AuthError.recoverySessionRestricted }
         try requireReauthenticated(context)
         try requireNotRecentlyRecovered(context)
@@ -52,6 +52,6 @@ extension AuthCore {
         }
         try await store.deleteUser(userID: context.user.id)
         securityEvent("user_deleted", metadata: ["user_id": "\(context.user.id.uuidString)"])
-        await mailQueue.enqueue(notificationMail(email: context.user.email, operation: "ユーザー削除", deviceLabel: context.session.deviceLabel))
+        await mailQueue.enqueue(notificationMail(email: context.user.email, operation: "ユーザー削除", deviceLabel: context.session.deviceLabel, country: country))
     }
 }

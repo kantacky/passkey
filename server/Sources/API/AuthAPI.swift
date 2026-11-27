@@ -7,12 +7,14 @@ import NIOCore
 extension HTTPField.Name {
     static let xClient = Self("X-Client")!
     static let xClientIP = Self("X-Client-IP")!
+    static let xClientCountry = Self("X-Client-Country")!
     static let xFlowSecret = Self("X-Flow-Secret")!
 }
 
 struct RequestCredentials {
     var client: ClientKind
     var ip: String
+    var country: String?
     var userAgent: String?
     var sessionToken: String?
     var sessionUsesCookie: Bool
@@ -97,6 +99,7 @@ public struct APIBuilder: Sendable {
                 code: input.code,
                 authenticatedContext: auth,
                 ip: credentials.ip,
+                country: credentials.country,
                 userAgent: credentials.userAgent
             )
             switch result {
@@ -139,6 +142,7 @@ public struct APIBuilder: Sendable {
                 flowSecret: auth == nil ? credentials.flowSecret : nil,
                 authenticatedContext: auth,
                 userAgent: credentials.userAgent,
+                country: credentials.country,
                 client: credentials.client
             )
             let body = RegistrationResponse(
@@ -230,7 +234,8 @@ public struct APIBuilder: Sendable {
         router.delete("/api/v1/me") { request, context in
             let input = try await request.decode(as: DeleteMeRequest.self, context: context)
             let auth = try await self.requiredAuth(request)
-            try await self.core.deleteUser(email: input.email, context: auth)
+            let credentials = try self.credentials(request)
+            try await self.core.deleteUser(email: input.email, context: auth, country: credentials.country)
             var headers = HTTPFields()
             if try self.credentials(request).sessionUsesCookie {
                 headers.append(.init(name: .setCookie, value: self.deleteSessionCookie()))
@@ -259,7 +264,8 @@ public struct APIBuilder: Sendable {
                 throw AuthError.invalidRequest()
             }
             let auth = try await self.requiredAuth(request)
-            let remaining = try await self.core.deletePasskey(credentialID: credentialID, context: auth)
+            let credentials = try self.credentials(request)
+            let remaining = try await self.core.deletePasskey(credentialID: credentialID, context: auth, country: credentials.country)
             return try self.json(
                 DeletePasskeyResponse(allAcceptedCredentialIds: remaining.map { $0.pkBase64URLEncodedString() }),
                 request: request,
@@ -287,6 +293,7 @@ public struct APIBuilder: Sendable {
         return RequestCredentials(
             client: client,
             ip: request.headers[.xClientIP] ?? "unknown",
+            country: request.headers[.xClientCountry],
             userAgent: request.headers[.userAgent],
             sessionToken: cookieSession ?? bearer,
             sessionUsesCookie: cookieSession != nil,

@@ -108,6 +108,7 @@ extension AuthCore {
         flowSecret: String?,
         authenticatedContext: AuthenticatedContext?,
         userAgent: String?,
+        country: String? = nil,
         client: ClientKind
     ) async throws -> RegistrationResult {
         guard input.rawID.count <= 1023, !input.rawID.isEmpty else { throw AuthError.verificationFailed }
@@ -230,7 +231,7 @@ extension AuthCore {
             case .emailTaken, .flowUnavailable: throw AuthError.verificationFailed
             }
             securityEvent("recovery_completed", metadata: ["user_id": "\(user.id.uuidString)"])
-            await mailQueue.enqueue(notificationMail(email: user.email, operation: "アカウント回復の完了", deviceLabel: device))
+            await mailQueue.enqueue(notificationMail(email: user.email, operation: "アカウント回復の完了", deviceLabel: device, country: country))
             return RegistrationResult(user: user, passkey: passkey, session: issued)
         }
 
@@ -241,7 +242,7 @@ extension AuthCore {
         case .emailTaken, .flowUnavailable: throw AuthError.verificationFailed
         }
         securityEvent("passkey_added", metadata: ["user_id": "\(context.user.id.uuidString)"])
-        await mailQueue.enqueue(notificationMail(email: context.user.email, operation: "パスキー追加", deviceLabel: device))
+        await mailQueue.enqueue(notificationMail(email: context.user.email, operation: "パスキー追加", deviceLabel: device, country: country))
         return RegistrationResult(user: context.user, passkey: passkey, session: IssuedSession(session: context.session, token: ""))
     }
 

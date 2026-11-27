@@ -201,7 +201,16 @@ public struct AuthCore: Sendable {
         )
     }
 
-    func notificationMail(email: String, operation: String, deviceLabel: String, detail: String = "") -> MailMessage {
+    func countryDisplayName(_ country: String?) -> String {
+        guard let country,
+              country.range(of: #"^[A-Za-z0-9-]{2,8}$"#, options: .regularExpression) != nil else {
+            return "不明"
+        }
+        let normalized = country.uppercased()
+        return Locale(identifier: "ja_JP").localizedString(forRegionCode: normalized) ?? normalized
+    }
+
+    func notificationMail(email: String, operation: String, deviceLabel: String, detail: String = "", country: String? = nil) -> MailMessage {
         MailMessage(
             to: email,
             subject: "Passkey アカウントの\(operation)",
@@ -211,6 +220,7 @@ public struct AuthCore: Sendable {
             操作: \(operation)
             日時: \(ISO8601DateFormatter().string(from: now))
             端末: \(deviceLabel)
+            おおよその地域（国）: \(countryDisplayName(country))
             \(detail)
 
             心当たりがない場合は、速やかにアカウント回復を行い、不明なパスキーとセッションを失効させてください。
