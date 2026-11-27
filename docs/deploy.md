@@ -98,7 +98,7 @@ Terraform は次を作成する。
 - Artifact Registry リポジトリ
 - `passkey-cloudbuild`、`passkey-server`、`passkey-migrator`、`passkey-scheduler`、`passkey-web-proxy` のサービスアカウントと IAM
 - 既存の共有 Cloud SQL インスタンス `kantacky-psql` 内の `passkey` データベースと IAM DB ユーザー
-- `passkey` データベースに限定した PostgreSQL 権限（`passkey-server` には public スキーマの USAGE・テーブル / シーケンスの DML、`passkey-migrator` には public スキーマの CREATE / USAGE、migrator が今後作るオブジェクトへの server の default privileges）
+- `passkey` データベースに限定した PostgreSQL 権限（`passkey-server` にはデータベース CONNECT・public スキーマの USAGE・テーブル / シーケンスの DML、`passkey-migrator` にはデータベース CONNECT・public スキーマの CREATE / USAGE、migrator が今後作るオブジェクトへの server の default privileges）
 - Secret Manager の `mailgun-api-key` の枠（値は入っていない）
 - Cloud Run サービスと migrate / cleanup Job（プレースホルダイメージ）
 - `passkey-web-proxy` と `passkey-scheduler` に対する resource 単位の `roles/run.invoker`

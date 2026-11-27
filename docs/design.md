@@ -700,7 +700,7 @@ Terraform が管理する主なリソースは、API 有効化、Artifact Regist
 - サイドカー `cloud-sql-proxy --auto-iam-authn --private-ip --health-check <instance>`、アプリは `127.0.0.1:5432` に接続。パスワード不要。
   - コンテナの起動順はアプリが proxy に依存する設定にし、proxy の startup probe が成功してからアプリを起動する。
   - 終了時はアプリが先に終わるまで proxy を維持する。
-- DB ユーザーは IAM サービスアカウントユーザー（`passkey-server@<project>.iam`、`passkey-migrator@<project>.iam`）。GCP 側の IAM ロールは `roles/cloudsql.client`、`roles/cloudsql.instanceUser`。PostgreSQL 側の権限は `cyrilgdn/postgresql` provider で `passkey` データベースに限定して管理する。`passkey-server` には public スキーマの USAGE、テーブルへの SELECT / INSERT / UPDATE / DELETE、シーケンスへの USAGE / SELECT だけを付与し、DDL 権限は持たせない。`pg_read_all_data`、`pg_write_all_data`、`cloudsqlsuperuser` などの広いロールは使わない。
+- DB ユーザーは IAM サービスアカウントユーザー（`passkey-server@<project>.iam`、`passkey-migrator@<project>.iam`）。GCP 側の IAM ロールは `roles/cloudsql.client`、`roles/cloudsql.instanceUser`。PostgreSQL 側の権限は `cyrilgdn/postgresql` provider で `passkey` データベースに限定して管理する。`passkey-server` には `passkey` データベースへの CONNECT、public スキーマの USAGE、テーブルへの SELECT / INSERT / UPDATE / DELETE、シーケンスへの USAGE / SELECT だけを付与し、DDL 権限は持たせない。`pg_read_all_data`、`pg_write_all_data`、`cloudsqlsuperuser` などの広いロールは使わない。
 - Cloud SQL は既存の共有インスタンス `kantacky-psql`（PostgreSQL 18、`cloudsql.iam_authentication=on`、private IP と public IP の両方が有効）を使う。Cloud Run は既存の `kantacky` ネットワーク / サブネットへの Direct VPC egress で、既存の Private Services Access 経由で private IP に接続する。
 - 接続プールは Cloud Run インスタンスあたり 10。共有インスタンスの `max_connections` は 100 で、他アプリ（ZITADEL、keiz、furarico など）も同じ接続予算を使う。`max-instances` × 10 に migrate / cleanup Job と他アプリの接続数を加えても 100 を超えないようにする。
 - `min-instances` は 1（コールドスタートで Conditional UI が遅れるのを避ける）。
@@ -731,7 +731,7 @@ Terraform が管理する主なリソースは、API 有効化、Artifact Regist
 
 ### 9.4 マイグレーション
 
-- Cloud Run Job `migrate` は、DDL 権限を持つ別の IAM サービスアカウント `passkey-migrator@` で実行する。PostgreSQL 側の権限は `cyrilgdn/postgresql` provider で `passkey` データベースに限定し、`passkey-migrator` には public スキーマへの CREATE / USAGE（DDL）だけを付与する。`postgresql_default_privileges` により、migrator が今後作成するテーブル・シーケンスにも `passkey-server` の DML 権限が自動付与される。他データベースには権限を付けない。
+- Cloud Run Job `migrate` は、DDL 権限を持つ別の IAM サービスアカウント `passkey-migrator@` で実行する。PostgreSQL 側の権限は `cyrilgdn/postgresql` provider で `passkey` データベースに限定し、`passkey-migrator` には `passkey` データベースへの CONNECT と public スキーマへの CREATE / USAGE（DDL）だけを付与する。`postgresql_default_privileges` により、migrator が今後作成するテーブル・シーケンスにも `passkey-server` の DML 権限が自動付与される。他データベースには権限を付けない。
 - デプロイの順序は「migrate → サービスのデプロイ」（`server/deploy/cloudbuild.yaml` の 1 回のビルドで実行）。変更は後方互換（expand → contract）に限り、旧バージョンのサービスが新スキーマで動くようにする。
 - Job でも proxy サイドカーを使い、アプリ終了後に proxy を終了させる（`--quitquitquit` エンドポイント）。
 
