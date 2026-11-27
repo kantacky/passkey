@@ -48,7 +48,7 @@ protocol APIClient: Sendable {
   func authenticate(_ request: AssertionFinishRequest) async throws -> SessionResponse
   func me() async throws -> User
   func passkeys() async throws -> [PasskeyCredential]
-  func renamePasskey(id: String, name: String?) async throws
+  func renamePasskey(id: String, name: String?) async throws -> PasskeyCredential
   func deletePasskey(id: String) async throws -> DeletePasskeyResponse
   func sessions() async throws -> [UserSession]
   func signOut() async throws
@@ -73,7 +73,7 @@ actor LiveAPIClient: APIClient {
               let url = URL(string: configured) {
       self.baseURL = url
     } else {
-      self.baseURL = URL(string: "https://passkey.kantacky.com/api/v1")!
+      self.baseURL = PasskeyConfiguration.defaultAPIBaseURL
     }
     if let urlSession {
       self.urlSession = urlSession
@@ -154,8 +154,8 @@ actor LiveAPIClient: APIClient {
     return envelope.passkeys
   }
 
-  func renamePasskey(id: String, name: String?) async throws {
-    let _: EmptyResponse = try await send(
+  func renamePasskey(id: String, name: String?) async throws -> PasskeyCredential {
+    try await send(
       method: "PATCH",
       path: "/passkeys/\(id)",
       body: RenamePasskeyRequest(name: name)

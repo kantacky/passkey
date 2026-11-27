@@ -93,7 +93,7 @@ final class PasskeysViewModel {
     defer { isWorking = false }
     do {
       let trimmed = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
-      try await api.renamePasskey(id: passkey.id, name: trimmed.isEmpty ? nil : trimmed)
+      _ = try await api.renamePasskey(id: passkey.id, name: trimmed.isEmpty ? nil : trimmed)
       passkeys = try await api.passkeys()
       renameCandidate = nil
     } catch {

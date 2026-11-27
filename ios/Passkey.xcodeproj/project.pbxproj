@@ -23,6 +23,7 @@
 		B87523137C18A00915DBE631 /* SessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = BC3537B75E1AFDCC2DB48164 /* SessionStore.swift */; };
 		C96D7116F9C098ECB808AB9F /* SignInView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE2AEC8A8DF0158A8A54510E /* SignInView.swift */; };
 		D383685CAA0159DD0EBB7ED3 /* VerificationCodeSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = C09A0C3F8A25B88A2A804533 /* VerificationCodeSection.swift */; };
+		E8C8DAB77442C39FF4D76A69 /* PasskeyConfiguration.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C96C5C65C68A93BBFE311A1 /* PasskeyConfiguration.swift */; };
 		EAA79F1B71C5B6B419AB2B27 /* CredentialSignalService.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6906A246A987846AC6E817B /* CredentialSignalService.swift */; };
 /* End PBXBuildFile section */
 
@@ -50,6 +51,7 @@
 		861EF3830C4042F920FE647E /* SessionsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionsView.swift; sourceTree = "<group>"; };
 		909F3EAFC43527FA93A0F518 /* AccountView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AccountView.swift; sourceTree = "<group>"; };
 		9B657F4F5E4A4C46E27ACECE /* RecoveryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecoveryView.swift; sourceTree = "<group>"; };
+		9C96C5C65C68A93BBFE311A1 /* PasskeyConfiguration.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PasskeyConfiguration.swift; sourceTree = "<group>"; };
 		BC3537B75E1AFDCC2DB48164 /* SessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionStore.swift; sourceTree = "<group>"; };
 		C09A0C3F8A25B88A2A804533 /* VerificationCodeSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VerificationCodeSection.swift; sourceTree = "<group>"; };
 		C47F075DCDCD64264E3D5C1C /* Reauthentication.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Reauthentication.swift; sourceTree = "<group>"; };
@@ -67,6 +69,7 @@
 			children = (
 				185E4CED6CD3DF9D76E6E6D9 /* APIClient.swift */,
 				E6906A246A987846AC6E817B /* CredentialSignalService.swift */,
+				9C96C5C65C68A93BBFE311A1 /* PasskeyConfiguration.swift */,
 				E6F236133711F3DBD88DE46D /* PasskeyService.swift */,
 				C47F075DCDCD64264E3D5C1C /* Reauthentication.swift */,
 				BC3537B75E1AFDCC2DB48164 /* SessionStore.swift */,
@@ -290,6 +293,7 @@
 				EAA79F1B71C5B6B419AB2B27 /* CredentialSignalService.swift in Sources */,
 				7ECDCBA999182FB092B463BD /* Models.swift in Sources */,
 				440401B250039BB0CD17AFF2 /* PasskeyApp.swift in Sources */,
+				E8C8DAB77442C39FF4D76A69 /* PasskeyConfiguration.swift in Sources */,
 				3698725C40D0C2FF65C68BEC /* PasskeyService.swift in Sources */,
 				9C1C6921C0805D33BB0C36A4 /* PasskeysView.swift in Sources */,
 				6ADB4DB346DAEF429112F5F4 /* Reauthentication.swift in Sources */,

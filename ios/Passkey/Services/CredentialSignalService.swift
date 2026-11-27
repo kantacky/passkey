@@ -18,7 +18,7 @@ struct LiveCredentialSignalService: CredentialSignalService {
       throw CredentialSignalError.unsupportedOS
     }
     try await ASCredentialDataManager().reportUnknownPublicKeyCredential(
-      relyingPartyIdentifier: "passkey.kantacky.com",
+      relyingPartyIdentifier: PasskeyConfiguration.rpID,
       credentialID: credentialID
     )
   }
@@ -28,7 +28,7 @@ struct LiveCredentialSignalService: CredentialSignalService {
       throw CredentialSignalError.unsupportedOS
     }
     try await ASCredentialDataManager().reportAllAcceptedPublicKeyCredentials(
-      relyingPartyIdentifier: "passkey.kantacky.com",
+      relyingPartyIdentifier: PasskeyConfiguration.rpID,
       userHandle: userHandle,
       acceptedCredentialIDs: acceptedCredentialIDs
     )
@@ -39,7 +39,7 @@ struct LiveCredentialSignalService: CredentialSignalService {
       throw CredentialSignalError.unsupportedOS
     }
     try await ASCredentialDataManager().reportPublicKeyCredentialUpdate(
-      relyingPartyIdentifier: "passkey.kantacky.com",
+      relyingPartyIdentifier: PasskeyConfiguration.rpID,
       userHandle: userHandle,
       newName: newName
     )
