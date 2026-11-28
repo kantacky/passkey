@@ -8,6 +8,8 @@ timeout: 3600s
 options:
   machineType: E2_HIGHCPU_8
   # Expose built-in substitutions (PROJECT_ID, BUILD_ID) as env vars inside `script:` steps.
+  # Substitutions are not applied to `script:` bodies, so use plain `$VAR` there;
+  # only `args:` steps need `$$` to escape shell variables.
   automapSubstitutions: true
   logging: CLOUD_LOGGING_ONLY
 steps:
@@ -26,19 +28,19 @@ steps:
       set -eu
       . /workspace/.deploy-env
 
-      if [ "${PROJECT_ID}" != "$$TF_PROJECT_ID" ]; then
-        echo "gcloud target project '${PROJECT_ID}' does not match project_id '$$TF_PROJECT_ID' in infra/terraform.tfvars." >&2
-        echo "Run: gcloud config set project $$TF_PROJECT_ID" >&2
+      if [ "${PROJECT_ID}" != "$TF_PROJECT_ID" ]; then
+        echo "gcloud target project '${PROJECT_ID}' does not match project_id '$TF_PROJECT_ID' in infra/terraform.tfvars." >&2
+        echo "Run: gcloud config set project $TF_PROJECT_ID" >&2
         exit 1
       fi
 
-      if ! gcloud run services describe "$$TF_CLOUD_RUN_SERVICE_NAME" --region "$$TF_REGION" --project "$$TF_PROJECT_ID" >/dev/null 2>&1; then
-        echo "Cloud Run service '$$TF_CLOUD_RUN_SERVICE_NAME' does not exist. Run terraform apply first." >&2
+      if ! gcloud run services describe "$TF_CLOUD_RUN_SERVICE_NAME" --region "$TF_REGION" --project "$TF_PROJECT_ID" >/dev/null 2>&1; then
+        echo "Cloud Run service '$TF_CLOUD_RUN_SERVICE_NAME' does not exist. Run terraform apply first." >&2
         exit 1
       fi
-      for job in "$$TF_MIGRATE_JOB_NAME" "$$TF_CLEANUP_JOB_NAME"; do
-        if ! gcloud run jobs describe "$$job" --region "$$TF_REGION" --project "$$TF_PROJECT_ID" >/dev/null 2>&1; then
-          echo "Cloud Run job '$$job' does not exist. Run terraform apply first." >&2
+      for job in "$TF_MIGRATE_JOB_NAME" "$TF_CLEANUP_JOB_NAME"; do
+        if ! gcloud run jobs describe "$job" --region "$TF_REGION" --project "$TF_PROJECT_ID" >/dev/null 2>&1; then
+          echo "Cloud Run job '$job' does not exist. Run terraform apply first." >&2
           exit 1
         fi
       done
@@ -65,11 +67,11 @@ steps:
       set -eu
       . /workspace/.deploy-env
       gcloud run jobs replace /workspace/.deploy-rendered/cloudrun-migrate-job.yaml \
-        --region "$$TF_REGION" \
-        --project "$$TF_PROJECT_ID"
-      gcloud run jobs execute "$$TF_MIGRATE_JOB_NAME" \
-        --region "$$TF_REGION" \
-        --project "$$TF_PROJECT_ID" \
+        --region "$TF_REGION" \
+        --project "$TF_PROJECT_ID"
+      gcloud run jobs execute "$TF_MIGRATE_JOB_NAME" \
+        --region "$TF_REGION" \
+        --project "$TF_PROJECT_ID" \
         --wait
 
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
@@ -78,8 +80,8 @@ steps:
       set -eu
       . /workspace/.deploy-env
       gcloud run services replace /workspace/.deploy-rendered/cloudrun-service.yaml \
-        --region "$$TF_REGION" \
-        --project "$$TF_PROJECT_ID"
+        --region "$TF_REGION" \
+        --project "$TF_PROJECT_ID"
 
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     id: deploy-cleanup-job
@@ -87,5 +89,5 @@ steps:
       set -eu
       . /workspace/.deploy-env
       gcloud run jobs replace /workspace/.deploy-rendered/cloudrun-cleanup-job.yaml \
-        --region "$$TF_REGION" \
-        --project "$$TF_PROJECT_ID"
+        --region "$TF_REGION" \
+        --project "$TF_PROJECT_ID"
