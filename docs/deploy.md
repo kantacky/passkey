@@ -33,7 +33,7 @@ Terraform の Google provider は Application Default Credentials (ADC) を使�
 例外が 2 つある。
 
 1. Terraform state のバケット名: GCS backend は変数を参照できないため、`infra/backend.tf` の `bucket` を直接編集する。`terraform init -backend-config` などの CLI 引数は使わない。
-2. Cloud Build 実行サービスアカウント名: Cloud Build は step 実行前に `serviceAccount` の identity を決めるため、このフィールドは `infra/terraform.tfvars` を読めない。既定の `passkey-cloudbuild` を変える場合だけ、`server/deploy/cloudbuild.yaml` の `serviceAccount` も同じ名前に編集する。ビルド開始時に tfvars との一致を検査する。
+2. Cloud Build 実行サービスアカウント名: Cloud Build は step 実行前に `serviceAccount` の identity を決めるため、このフィールドは `infra/terraform.tfvars` を読めない。既定の `passkey-cloudbuild` を変える場合だけ、`server/deploy/cloudbuild.yaml` の `serviceAccount` も同じ名前に編集する。
 
 `server/deploy/cloudrun-*.yaml` はテンプレートである。`__REGION__` などのプレースホルダは手で編集せず、`cloudbuild.yaml` が `infra/terraform.tfvars` の値とイメージタグで置換する。
 
