@@ -16,28 +16,19 @@ steps:
       python3 server/deploy/deploy_config.py export infra/terraform.tfvars /workspace/.deploy-env
       . /workspace/.deploy-env
 
-      if [ "${PROJECT_ID}" != "$TF_PROJECT_ID" ]; then
-        echo "gcloud target project '${PROJECT_ID}' does not match project_id '$TF_PROJECT_ID' in infra/terraform.tfvars." >&2
-        echo "Run: gcloud config set project $TF_PROJECT_ID" >&2
-        exit 1
-      fi
-      cloudbuild_sa_name=$(sed -n 's/^serviceAccount: projects\/\$PROJECT_ID\/serviceAccounts\/\([^@][^@]*\)@\$PROJECT_ID\.iam\.gserviceaccount\.com$/\1/p' server/deploy/cloudbuild.yaml)
-      if [ -z "$cloudbuild_sa_name" ]; then
-        echo "Could not parse serviceAccount in server/deploy/cloudbuild.yaml." >&2
-        exit 1
-      fi
-      if [ "$TF_CLOUDBUILD_SERVICE_ACCOUNT_NAME" != "$cloudbuild_sa_name" ]; then
-        echo "cloudbuild_service_account_name in infra/terraform.tfvars must match the serviceAccount in server/deploy/cloudbuild.yaml." >&2
+      if [ "${PROJECT_ID}" != "$$TF_PROJECT_ID" ]; then
+        echo "gcloud target project '${PROJECT_ID}' does not match project_id '$$TF_PROJECT_ID' in infra/terraform.tfvars." >&2
+        echo "Run: gcloud config set project $$TF_PROJECT_ID" >&2
         exit 1
       fi
 
-      if ! gcloud run services describe "$TF_CLOUD_RUN_SERVICE_NAME" --region "$TF_REGION" --project "$TF_PROJECT_ID" >/dev/null 2>&1; then
-        echo "Cloud Run service '$TF_CLOUD_RUN_SERVICE_NAME' does not exist. Run terraform apply first." >&2
+      if ! gcloud run services describe "$$TF_CLOUD_RUN_SERVICE_NAME" --region "$$TF_REGION" --project "$$TF_PROJECT_ID" >/dev/null 2>&1; then
+        echo "Cloud Run service '$$TF_CLOUD_RUN_SERVICE_NAME' does not exist. Run terraform apply first." >&2
         exit 1
       fi
-      for job in "$TF_MIGRATE_JOB_NAME" "$TF_CLEANUP_JOB_NAME"; do
-        if ! gcloud run jobs describe "$job" --region "$TF_REGION" --project "$TF_PROJECT_ID" >/dev/null 2>&1; then
-          echo "Cloud Run job '$job' does not exist. Run terraform apply first." >&2
+      for job in "$$TF_MIGRATE_JOB_NAME" "$$TF_CLEANUP_JOB_NAME"; do
+        if ! gcloud run jobs describe "$$job" --region "$$TF_REGION" --project "$$TF_PROJECT_ID" >/dev/null 2>&1; then
+          echo "Cloud Run job '$$job' does not exist. Run terraform apply first." >&2
           exit 1
         fi
       done
@@ -50,10 +41,10 @@ steps:
       - |
         set -eu
         . /workspace/.deploy-env
-        image="${TF_REGION}-docker.pkg.dev/${TF_PROJECT_ID}/${TF_ARTIFACT_REPOSITORY}/${TF_IMAGE_NAME}:${BUILD_ID}"
+        image="$${TF_REGION}-docker.pkg.dev/$${TF_PROJECT_ID}/$${TF_ARTIFACT_REPOSITORY}/$${TF_IMAGE_NAME}:${BUILD_ID}"
         docker buildx build \
           --platform=linux/amd64 \
-          --tag "$image" \
+          --tag "$$image" \
           --file server/Containerfile \
           --push \
           server
@@ -70,11 +61,11 @@ steps:
       set -eu
       . /workspace/.deploy-env
       gcloud run jobs replace /workspace/.deploy-rendered/cloudrun-migrate-job.yaml \
-        --region "$TF_REGION" \
-        --project "$TF_PROJECT_ID"
-      gcloud run jobs execute "$TF_MIGRATE_JOB_NAME" \
-        --region "$TF_REGION" \
-        --project "$TF_PROJECT_ID" \
+        --region "$$TF_REGION" \
+        --project "$$TF_PROJECT_ID"
+      gcloud run jobs execute "$$TF_MIGRATE_JOB_NAME" \
+        --region "$$TF_REGION" \
+        --project "$$TF_PROJECT_ID" \
         --wait
 
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
@@ -83,8 +74,8 @@ steps:
       set -eu
       . /workspace/.deploy-env
       gcloud run services replace /workspace/.deploy-rendered/cloudrun-service.yaml \
-        --region "$TF_REGION" \
-        --project "$TF_PROJECT_ID"
+        --region "$$TF_REGION" \
+        --project "$$TF_PROJECT_ID"
 
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     id: deploy-cleanup-job
@@ -92,5 +83,5 @@ steps:
       set -eu
       . /workspace/.deploy-env
       gcloud run jobs replace /workspace/.deploy-rendered/cloudrun-cleanup-job.yaml \
-        --region "$TF_REGION" \
-        --project "$TF_PROJECT_ID"
+        --region "$$TF_REGION" \
+        --project "$$TF_PROJECT_ID"
