@@ -1,0 +1,8 @@
+# Upload only what Cloud Build needs: server sources, deploy config and tfvars.
+*
+!server/
+!server/**
+server/.build/
+!infra/
+infra/*
+!infra/terraform.tfvars
