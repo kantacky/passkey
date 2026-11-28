@@ -9,11 +9,19 @@ options:
   machineType: E2_HIGHCPU_8
   logging: CLOUD_LOGGING_ONLY
 steps:
+  # The cloud-sdk image does not ship python3, so tfvars parsing and manifest
+  # rendering run in a python image and hand results over via /workspace.
+  - name: python:3.13-slim
+    id: load-config
+    script: |
+      set -eu
+      python3 server/deploy/deploy_config.py export infra/terraform.tfvars /workspace/.deploy-env
+      python3 server/deploy/deploy_config.py render infra/terraform.tfvars "${BUILD_ID}" /workspace/.deploy-rendered
+
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     id: validate-config
     script: |
       set -eu
-      python3 server/deploy/deploy_config.py export infra/terraform.tfvars /workspace/.deploy-env
       . /workspace/.deploy-env
 
       if [ "${PROJECT_ID}" != "$$TF_PROJECT_ID" ]; then
@@ -48,12 +56,6 @@ steps:
           --file server/Containerfile \
           --push \
           server
-
-  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
-    id: render-cloud-run-manifests
-    script: |
-      set -eu
-      python3 server/deploy/deploy_config.py render infra/terraform.tfvars "${BUILD_ID}" /workspace/.deploy-rendered
 
   - name: gcr.io/google.com/cloudsdktool/cloud-sdk
     id: migrate-database
